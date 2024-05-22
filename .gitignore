@@ -1,4 +1,6 @@
 data/
 ui/
 mui/livestream-companion-ui/node_modules/
+mui/livestream-companion-ui/package-lock.json
+mui/livestream-companion-ui/package.json
 livestream-companion
