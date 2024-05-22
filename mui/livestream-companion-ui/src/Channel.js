@@ -3,6 +3,7 @@ import { Grid, Container, Box, Typography, TableContainer, Table, TableBody, Pap
 import SearchIcon from '@mui/icons-material/Search';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
+import LinkIcon from '@mui/icons-material/Link';
 import LiveTvIcon from '@mui/icons-material/LiveTv';
 import AppBar from '@mui/material/AppBar';
 import { SnackbarContext } from './SnackbarContext';
@@ -147,6 +148,11 @@ const Channels = () => {
     setCurrentChannel(channel);
     setOpenDialog(true);
   };
+
+  const copyStreamLink = (channel) => {
+    navigator.clipboard.writeText(`${document.location.origin}/hls/${channel.ID}.ts`);
+    openSnackbar('Stream link sent to clipboard');
+  }
   
   const closeDialog = () => {
     cleanupPlayer();
@@ -247,7 +253,8 @@ const Channels = () => {
                     <TableCell>ID</TableCell>
                     <TableCell>Channel Name</TableCell>
                     <TableCell>Status</TableCell>
-                    <TableCell>Play Stream</TableCell>
+                    <TableCell>Play</TableCell>
+                    <TableCell>Link</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -263,6 +270,11 @@ const Channels = () => {
                       <TableCell>
                         <IconButton onClick={() => playStream(channel)}>
                           <LiveTvIcon /> 
+                        </IconButton>
+                      </TableCell>
+                      <TableCell>
+                        <IconButton onClick={() => copyStreamLink(channel)}>
+                          <LinkIcon />
                         </IconButton>
                       </TableCell>
                     </TableRow>
