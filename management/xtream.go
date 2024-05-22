@@ -121,7 +121,7 @@ func ImportXtream(c *gin.Context, ID uint) {
 		var dbCategory Category
 		var err error
 		if !newPlaylist {
-			err = DB.Model(&Category{}).Where("external_id = ?", category.ExternalID).First(&dbCategory).Error
+			err = DB.Model(Category{}).Where("external_id = ? and playlist_id = ?", category.ExternalID, playlist.ID).First(&dbCategory).Error
 		}
 		if newPlaylist || err == gorm.ErrRecordNotFound {
 			dbCategory.ExternalID = category.ExternalID
@@ -164,42 +164,18 @@ func ImportXtream(c *gin.Context, ID uint) {
 		log.Fatal(result.Error)
 	}
 
-	// Create a slice to hold the category channels to be created
-	categoryChannels := make([]Channel, len(categories))
-
-	// Iterate through the categories and format them into channels
-	for i, category := range categories {
-		categoryChannels[i] = Channel{
-			Num:            hdhrChannelNum,
-			Name:           fmt.Sprintf("----- %s -----", category.CategoryName),
-			CategoryID:     category.ID,
-			StreamURL:      "http://placeholder",
-			StreamID:       -1,
-			EpgChannelID:   "",
-			HDHRChannelNum: 0,
-			Active:         true,
-		}
-		hdhrChannelNum++
-	}
-
-	// Batch insert the new category channels
-	DB.CreateInBatches(categoryChannels, 500)
-
 	for _, channel := range channelsResponse {
+		var category Category
 		var dbChannel Channel
-		var err error
+		var err error = DB.Model(Category{}).Where("external_id = ? and playlist_id = ?", channel.ExternalCategoryID, playlist.ID).First(&category).Error
+		if err == gorm.ErrRecordNotFound {
+			log.Print(err)
+			continue
+		}
 		if !newPlaylist {
-			err = DB.Model(&Channel{}).Where("stream_id = ?", channel.StreamID).First(&dbChannel).Error
+			err = DB.Model(Channel{}).Where("stream_id = ? and external_category_id = ?", channel.StreamID, channel.ExternalCategoryID).First(&dbChannel).Error
 		}
 		if newPlaylist || err == gorm.ErrRecordNotFound {
-			var category Category
-			if err := DB.Model(&Category{}).Where("external_id = ?", channel.ExternalCategoryID).First(&category).Error; err != nil {
-				log.Print(err)
-				playlist.ImportStatus = -1
-				playlist.Update()
-				return
-			}
-
 			dbChannel.Num = channel.Num
 			dbChannel.Name = channel.Name
 			dbChannel.CategoryID = category.ID
@@ -221,14 +197,6 @@ func ImportXtream(c *gin.Context, ID uint) {
 			}
 			hdhrChannelNum++
 		} else {
-			var category Category
-			if err := DB.Model(&Category{}).Where("external_id = ?", channel.ExternalCategoryID).First(&category).Error; err != nil {
-				log.Print(err)
-				playlist.ImportStatus = -1
-				playlist.Update()
-				return
-			}
-
 			dbChannel.Num = channel.Num
 			dbChannel.Name = channel.Name
 			dbChannel.CategoryID = category.ID

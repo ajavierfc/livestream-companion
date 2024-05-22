@@ -84,6 +84,10 @@ func UpdatePlaylistEPG(playlist Playlist) error {
 
 	log.Printf("Processing playlist: %v", playlist.ID)
 
+	if playlist.XmltvURL == "" {
+		return nil;
+	}
+
 	playlist.EpgStatus = 1
 	if err := DB.Save(&playlist).Error; err != nil {
 		playlist.EpgStatus = -1
