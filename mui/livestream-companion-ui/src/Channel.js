@@ -11,6 +11,7 @@ import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import axios from 'axios';
 import mpegts from 'mpegts.js';
+import { copyToClipboard } from './App';
 
 const Channels = () => {
   const [playlists, setPlaylists] = useState([]);
@@ -150,7 +151,7 @@ const Channels = () => {
   };
 
   const copyStreamLink = (channel) => {
-    navigator.clipboard.writeText(`${document.location.origin}/hls/${channel.ID}.ts`);
+    copyToClipboard(`${document.location.origin}/hls/${channel.ID}.ts`);
     openSnackbar('Stream link sent to clipboard');
   }
   

@@ -31,7 +31,7 @@ import Channel from './Channel';
 
 const drawerWidth = 240;
 
-const copyToClipboard = async (text) => {
+export const copyToClipboard = async (text) => {
   if (navigator.clipboard) {
     await navigator.clipboard.writeText(text);
   } else {
