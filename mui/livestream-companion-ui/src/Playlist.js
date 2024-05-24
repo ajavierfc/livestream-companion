@@ -86,11 +86,17 @@ const getTooltipByStatus = (status) => {
   }
 };
 
-const ImportStatusButton = ({ importStatus, handlePress }) => {
+const ImportStatusButton = ({ playlist }) => {
+  const navigate = useNavigate();
+  const handleImport = async () => {
+    axios.put(`/api/playlist/${playlist.ID}`, playlist);
+    navigate('/playlists');
+  };
+
   return (
-    <Tooltip title={getTooltipByStatus(importStatus)}>
-      <IconButton color="primary" onClick={handlePress}>
-        {getIconByStatus(importStatus)}
+    <Tooltip title={getTooltipByStatus(playlist.ImportStatus)}>
+      <IconButton color="primary" onClick={handleImport}>
+        {getIconByStatus(playlist.ImportStatus)}
       </IconButton>
     </Tooltip>
   );
@@ -212,7 +218,7 @@ const PlaylistTable = () => {
                   <DeleteButton playlistId={row.ID} onDeletion={refreshPlaylists} onSnackbarOpen={handleDeletion} />
                 </TableCell>
                 <TableCell>
-                  <ImportStatusButton importStatus={row.ImportStatus} />
+                  <ImportStatusButton playlist={row} />
                 </TableCell>
                 <TableCell>
                   <EPGStatusButton epgStatus={row.EpgStatus} />
