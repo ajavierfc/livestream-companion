@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,16 @@ type CategoryInfo struct {
 	ID           string
 	ExternalID   string
 	CategoryName string
+}
+
+func handleError(playlist *Playlist, err error) bool {
+	if err != nil {
+		log.Print(err)
+		playlist.ImportStatus = -1
+		playlist.Update();
+		return true
+	}
+	return false
 }
 
 func ImportXtream(c *gin.Context, ID uint) {
@@ -44,6 +55,25 @@ func ImportXtream(c *gin.Context, ID uint) {
 		scheme = forwardedProto
 	} else if c.Request.TLS != nil {
 		scheme = "https"
+	}
+
+	var xtreamInfo XtreamInfo
+	xtreamInfo, err = GetXtreamServerInfo(playlist)
+	if handleError(playlist, err) {
+		return
+	}
+
+	playlist.ExpiresAt = xtreamInfo.UserInfo.ExpirationDate
+	playlist.Expired = IsDateBeforeCurrent(xtreamInfo.UserInfo.ExpirationDate)
+
+	streamFormat := "m3u8"
+	if len(xtreamInfo.UserInfo.AllowedOutputFormats) > 0 {
+		allowedFormats := "," + strings.Join(xtreamInfo.UserInfo.AllowedOutputFormats, ",") + ","
+		if strings.Contains(allowedFormats, ",ts,") {
+			streamFormat = "ts"
+		} else if !strings.Contains(allowedFormats, ",m3u8,") {
+			streamFormat = xtreamInfo.UserInfo.AllowedOutputFormats[0]
+		}
 	}
 
 	var categoryListURL string
@@ -184,7 +214,7 @@ func ImportXtream(c *gin.Context, ID uint) {
 			if playlist.Type == "m3u" {
 				dbChannel.StreamURL = channel.StreamURL
 			} else {
-				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.ts", baseURL, username, password, channel.StreamID)
+				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.%s", baseURL, username, password, channel.StreamID, streamFormat)
 			}
 			dbChannel.EpgChannelID = channel.EpgChannelID
 			dbChannel.HDHRChannelNum = hdhrChannelNum
@@ -205,7 +235,7 @@ func ImportXtream(c *gin.Context, ID uint) {
 			if playlist.Type == "m3u" {
 				dbChannel.StreamURL = channel.StreamURL
 			} else {
-				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.ts", baseURL, username, password, channel.StreamID)
+				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.%s", baseURL, username, password, channel.StreamID, streamFormat)
 			}
 			dbChannel.EpgChannelID = channel.EpgChannelID
 			dbChannel.HDHRChannelNum = hdhrChannelNum
@@ -246,4 +276,25 @@ func ImportXtream(c *gin.Context, ID uint) {
 	}
 
 	log.Printf("Imported playlist %d in %s", playlist.ID, time.Since(startTime))
+}
+
+func GetXtreamServerInfo(playlist *Playlist) (XtreamInfo, error) {
+	if playlist.Type != "xcode" {
+		return XtreamInfo{}, nil
+	}
+	infoURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_simple_date_table", playlist.Server, playlist.Username, playlist.Password)
+	response, err := http.Get(infoURL);
+	if err != nil {
+		return XtreamInfo{}, err
+	}
+	defer response.Body.Close()
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return XtreamInfo{}, err
+	}
+	var xtreamInfo XtreamInfo
+	if err = json.Unmarshal(body, &xtreamInfo); err != nil {
+		return XtreamInfo{}, err
+	}
+	return xtreamInfo, err
 }

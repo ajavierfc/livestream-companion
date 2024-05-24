@@ -18,6 +18,7 @@ type Playlist struct {
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	EPGLastProcessedAt time.Time
+	ExpiresAt          string
 	Description        string
 	Server             string
 	Username           string
@@ -28,6 +29,7 @@ type Playlist struct {
 	ImportStatus       int `gorm:"default:0"`
 	EpgStatus          int `gorm:"default:0"`
 	Restream           bool
+	Expired            bool
 	Categories         []Category `gorm:"foreignKey:PlaylistID;references:ID"`
 }
 

@@ -22,6 +22,8 @@ func (p *Playlist) Update() error {
 		"M3uURL":       p.M3uURL,
 		"ImportStatus": p.ImportStatus,
 		"Restream":     p.Restream,
+		"ExpiresAt":    p.ExpiresAt,
+		"Expired":      p.Expired,
 	})
 	if result.Error != nil {
 		return result.Error

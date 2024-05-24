@@ -82,7 +82,21 @@ func UpdatePlaylistEPG(playlist Playlist) error {
 	mutexEPG.Lock()
 	defer mutexEPG.Unlock()
 
-	log.Printf("Processing playlist: %v", playlist.ID)
+	log.Printf("Processing playlist: %v [%v]", playlist.ID, playlist.Description)
+
+	xtreamInfo, err := GetXtreamServerInfo(&playlist)
+	if err == nil && xtreamInfo.UserInfo.ExpirationDate != "" {
+		playlist.ExpiresAt = xtreamInfo.UserInfo.ExpirationDate
+	}
+	if playlist.ExpiresAt != "" {
+		playlist.Expired = IsDateBeforeCurrent(playlist.ExpiresAt)
+		playlist.Update()
+	}
+	if err != nil {
+		playlist.EpgStatus = -1
+		DB.Save(&playlist)
+		return fmt.Errorf("failed to update playlist status: %w", err)
+	}
 
 	if playlist.XmltvURL == "" {
 		return nil;

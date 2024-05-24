@@ -176,7 +176,7 @@ const Channels = () => {
                   sx={{ width: '100%' }}
                 >
                   {playlists.map(playlist => (
-                    <MenuItem key={playlist.ID} value={playlist.ID}>{playlist.Description}</MenuItem>
+                    <MenuItem key={playlist.ID} value={playlist.ID}>{playlist.Description}{playlist.Expired ? " (Expired)" : ""}</MenuItem>
                   ))}
                 </Select>
               </Grid>
@@ -231,6 +231,11 @@ const Channels = () => {
                             <Box>
                               <IconButton onClick={() => onToggleActive(channel)}>
                                 {channel.Active ? <CheckIcon /> : <CloseIcon />}
+                              </IconButton>
+                            </Box>
+                            <Box>
+                              <IconButton onClick={() => copyStreamLink(channel)}>
+                                <LinkIcon />
                               </IconButton>
                             </Box>
                             <Box>

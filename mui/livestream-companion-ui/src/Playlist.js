@@ -86,17 +86,19 @@ const getTooltipByStatus = (status) => {
   }
 };
 
-const ImportStatusButton = ({ playlist }) => {
+const ImportStatusButton = ({ playlist, importStatus }) => {
   const navigate = useNavigate();
   const handleImport = async () => {
-    axios.put(`/api/playlist/${playlist.ID}`, playlist);
-    navigate('/playlists');
+    if (playlist.ImportStatus !== 1) {
+      axios.put(`/api/playlist/${playlist.ID}`, playlist);
+      navigate('/playlists');
+    }
   };
 
   return (
-    <Tooltip title={getTooltipByStatus(playlist.ImportStatus)}>
+    <Tooltip title={getTooltipByStatus(importStatus || playlist.ImportStatus)}>
       <IconButton color="primary" onClick={handleImport}>
-        {getIconByStatus(playlist.ImportStatus)}
+        {getIconByStatus(importStatus || playlist.ImportStatus)}
       </IconButton>
     </Tooltip>
   );
@@ -146,6 +148,16 @@ const PlaylistTable = () => {
     refreshPlaylists();
   }, [refreshPlaylists]);
 
+  const secondsToDate = (secondsStr) => {
+      const seconds = parseInt(secondsStr, 10);
+      const date = new Date(seconds * 1000);
+      const day = date.getDate();
+      const month = date.getMonth() + 1;
+      const year = date.getFullYear();
+      const formattedDate = `${day.toString().padStart(2, '0')}/${month.toString().padStart(2, '0')}/${year}`;
+      return formattedDate;
+  }
+
   const handleDeletion = (message) => {
     openSnackbar(message);
   };
@@ -177,7 +189,7 @@ const PlaylistTable = () => {
                 }}
               >
                 <Grid container spacing={1} sx={{ margin: [0, 0, 0, 0] }}>
-                  <Grid item xs={12}>{row.ID}: {row.Description}</Grid>
+                  <Grid item xs={12}>{row.ID}: {row.Description}{row.Expired ? " (Expired)" : ""}</Grid>
                   <Grid item xs={6}>Type: {row.Type}</Grid>
                   <Grid item xs={12}>Import Status: <ImportStatusButton importStatus={row.ImportStatus} /></Grid>
                   <Grid item xs={12}>EPG Status: <EPGStatusButton epgStatus={row.EpgStatus} /></Grid>
@@ -200,6 +212,7 @@ const PlaylistTable = () => {
               <TableCell>ID</TableCell>
               <TableCell>Description</TableCell>
               <TableCell>Type</TableCell>
+              <TableCell>Expiration</TableCell>
               <TableCell>Actions</TableCell>
               <TableCell>Import Status</TableCell>
               <TableCell>EPG Status</TableCell>
@@ -211,6 +224,7 @@ const PlaylistTable = () => {
                 <TableCell>{row.ID}</TableCell>
                 <TableCell>{row.Description}</TableCell>
                 <TableCell>{row.Type}</TableCell>
+                <TableCell>{row.Expired ? "Expired" : secondsToDate(row.ExpiresAt)}</TableCell>
                 <TableCell>
                   <IconButton color="primary" onClick={() => handleEdit(row.ID)}>
                     <EditIcon />
@@ -218,7 +232,7 @@ const PlaylistTable = () => {
                   <DeleteButton playlistId={row.ID} onDeletion={refreshPlaylists} onSnackbarOpen={handleDeletion} />
                 </TableCell>
                 <TableCell>
-                  <ImportStatusButton playlist={row} />
+                  <ImportStatusButton playlist={row} importStatus={row.importStatus} />
                 </TableCell>
                 <TableCell>
                   <EPGStatusButton epgStatus={row.EpgStatus} />
