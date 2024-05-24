@@ -184,7 +184,7 @@ func ImportXtream(c *gin.Context, ID uint) {
 			if playlist.Type == "m3u" {
 				dbChannel.StreamURL = channel.StreamURL
 			} else {
-				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.m3u8", baseURL, username, password, channel.StreamID)
+				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.ts", baseURL, username, password, channel.StreamID)
 			}
 			dbChannel.EpgChannelID = channel.EpgChannelID
 			dbChannel.HDHRChannelNum = hdhrChannelNum
@@ -205,7 +205,7 @@ func ImportXtream(c *gin.Context, ID uint) {
 			if playlist.Type == "m3u" {
 				dbChannel.StreamURL = channel.StreamURL
 			} else {
-				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.m3u8", baseURL, username, password, channel.StreamID)
+				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.ts", baseURL, username, password, channel.StreamID)
 			}
 			dbChannel.EpgChannelID = channel.EpgChannelID
 			dbChannel.HDHRChannelNum = hdhrChannelNum
