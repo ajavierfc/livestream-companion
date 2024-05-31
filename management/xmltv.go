@@ -69,7 +69,7 @@ func UpdateDBEPG(checkLastProcessed bool) {
 		// Call the function that will update the playlist
 		err := UpdatePlaylistEPG(playlist)
 		if err != nil {
-			log.Fatal(err)
+			log.Printf("%v", err)
 		}
 	}
 

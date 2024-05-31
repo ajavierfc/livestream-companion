@@ -30,6 +30,8 @@ func handleError(playlist *Playlist, err error) bool {
 }
 
 func ImportXtream(c *gin.Context, ID uint) {
+	log.Printf("Importing playlist %d", ID)
+
 	playlist, err := GetPlaylistByID(ID)
 	if err != nil {
 		log.Print(err)
