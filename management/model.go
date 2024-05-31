@@ -47,7 +47,7 @@ type Category struct {
 }
 
 type Channel struct {
-	ID                 int `gorm:"primaryKey"`
+    ID                 int `gorm:"uniqueIndex"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	Num                int    `json:"num"`
