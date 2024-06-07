@@ -205,7 +205,7 @@ func ImportXtream(c *gin.Context, ID uint) {
 			continue
 		}
 		if !newPlaylist {
-			err = DB.Model(Channel{}).Where("stream_id = ? and external_category_id = ?", channel.StreamID, channel.ExternalCategoryID).First(&dbChannel).Error
+			err = DB.Model(Channel{}).Where("stream_id = ? and category_id = ?", channel.StreamID, category.ID).First(&dbChannel).Error
 		}
 		if newPlaylist || err == gorm.ErrRecordNotFound {
 			dbChannel.Num = channel.Num
