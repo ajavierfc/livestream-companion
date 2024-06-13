@@ -114,8 +114,7 @@ const Channels = () => {
       const playerInstance = mpegts.createPlayer({
         type: 'mpegts',
         isLive: true,
-        url: `/hls/${currentChannel.ID}.ts`,
-        //url: `/hls/${currentChannel.ID}.ts?webbrowser=true`,
+        url: `/hls/${currentChannel.ID}.ts?webbrowser=true`,
       });
   
       playerInstance.attachMediaElement(videoRef.current);

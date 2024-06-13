@@ -36,19 +36,22 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser bool) {
 		for {
 			var cmd *exec.Cmd
 			if webbrowser {
-				log.Println("Converting audio for webrowser compatibility.")
+				log.Println("Converting audio for web browser compatibility.")
 				cmd = exec.CommandContext(ctx,
 					"ffmpeg",
 					"-i",
 					inputUrl,
 					"-c:v", "copy",
-					"-c:a", "libmp3lame",
+					"-c:a", "libtwolame",
 					"-f", "hls",
 					"-hls_time", "2",
 					"-hls_list_size", "6",
 					"-sn",
 					"-hls_flags", "delete_segments",
 					"-hls_segment_filename", filepath.Join(hlsDir, id+"-%d.ts"),
+					"-index_correction",
+					"-ignore_io_errors",
+					"-use_timeline", "0",
 					hlsFile,
 				)
 			} else {
