@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect, useCallback, useContext } from 'react';
-import { Grid, Container, Box, Checkbox, FormControlLabel, Typography, TableContainer, Table, TableBody, Paper, TableCell, TableHead, TableRow, Toolbar, Button, TextField, Select, MenuItem, IconButton, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { Grid, Container, Box, Typography, TableContainer, Table, TableBody, Paper, TableCell, TableHead, TableRow, Toolbar, Button, TextField, Select, MenuItem, IconButton, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import CheckIcon from '@mui/icons-material/Check';
 import CloseIcon from '@mui/icons-material/Close';
@@ -23,7 +23,6 @@ const Channels = () => {
   const { openSnackbar } = useContext(SnackbarContext);
   const [openDialog, setOpenDialog] = useState(false);
   const [currentChannel, setCurrentChannel] = useState(null);
-  const [audioTranscode, setAudioTranscode] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   const videoRef = useRef(null);
@@ -112,11 +111,10 @@ const Channels = () => {
 
   const createPlayer = useCallback(() => {
     if (currentChannel && videoRef.current) {
-      const queryParams = audioTranscode ? "?webbrowser=true" : "";
       const playerInstance = mpegts.createPlayer({
         type: 'mpegts',
         isLive: true,
-        url: `/hls/${currentChannel.ID}.ts${queryParams}`,
+        url: `/hls/${currentChannel.ID}.ts?webbrowser=true`,
       });
   
       playerInstance.attachMediaElement(videoRef.current);
@@ -125,7 +123,7 @@ const Channels = () => {
       
       setPlayer(playerInstance); // Save the player instance to the state
     }
-  }, [currentChannel, audioTranscode]);
+  }, [currentChannel]);
   
   const cleanupPlayer = () => {
     if (player) {
@@ -160,10 +158,6 @@ const Channels = () => {
   const closeDialog = () => {
     cleanupPlayer();
     setOpenDialog(false);
-  };
-
-  const handleAudioTranscode = (event) => {
-    setAudioTranscode(event.target.checked);
   };
   
   return (
@@ -339,10 +333,6 @@ const Channels = () => {
         </Box>
         <AppBar position="fixed" color="default" sx={{ top: 'auto', bottom: 0 }}>
           <Box display="flex" justifyContent="flex-end" padding={2}>
-            <FormControlLabel
-              label="Audio transcode"
-              control={<Checkbox checked={audioTranscode} onChange={handleAudioTranscode}/>}
-            />
             <Button onClick={() => onDeactivateAll(selectedPlaylistId, selectedCategoryId)}>Deactivate All</Button>
             <Button onClick={() => onActivateAll(selectedPlaylistId, selectedCategoryId)}>Activate All</Button>
           </Box>

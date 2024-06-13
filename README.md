@@ -35,7 +35,7 @@ cd livestream-companion
 ```
 
 3. **Build and Deploy the UI**:
-Before building the Go application, you need to build and deploy the UI. Follow these steps:
+Before building the Go application, you need to build and deploy the UI. Follow these steps (go 1.22.3, node v16.20.2):
 - Enter the UI folder:
 ```bash
 cd mui/livestream-companion-ui/
