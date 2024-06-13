@@ -29,6 +29,7 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser bool) {
 	hlsDir := "/tmp"
 	hlsFile := filepath.Join(hlsDir, id+".m3u8")
 
+	exec.CommandContext(ctx, "pkill", "-ef", inputUrl).Start();
 	cleanupTsFiles(hlsDir, id)
 
 	// Start the FFMPEG command
