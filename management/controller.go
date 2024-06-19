@@ -405,7 +405,7 @@ func StreamHandler(c *gin.Context) {
 			return
 		}
 
-		webbrowser, _ := strconv.ParseBool(c.DefaultQuery("webbrowser", "false"))
+		webbrowser := c.DefaultQuery("webbrowser", "false")
 		stream.HandleTS(c, channel.StreamURL, id, webbrowser)
 	}
 

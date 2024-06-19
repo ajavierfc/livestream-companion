@@ -23,7 +23,7 @@ type Stream struct {
 	Client   http.ResponseWriter
 }
 
-func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser bool) {
+func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 	ctx := c.Request.Context()
 
 	hlsDir := "/tmp"
@@ -35,7 +35,7 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser bool) {
 	go func() {
 		for {
 			var cmd *exec.Cmd
-			if webbrowser {
+			if webbrowser == "true" {
 				log.Println("Converting audio for web browser compatibility.")
 				cmd = exec.CommandContext(ctx,
 					"ffmpeg",
@@ -54,8 +54,45 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser bool) {
 					"-use_timeline", "0",
 					hlsFile,
 				)
-			} else {
+			} else if webbrowser == "lq" {
+				log.Println("Converting to low quality resolution.")
 				cmd = exec.CommandContext(ctx,
+					"ffmpeg",
+					"-i",
+					inputUrl,
+					"-c:v:0", "libx264",
+					"-c:a:0", "libtwolame",
+					"-filter_complex", "[0:0]yadif@f1=mode=send_frame:parity=auto:deint=all,scale@f2=width=720:height=574[f2_out0]",
+					"-map", "[f2_out0]",
+					"-map", "0:1",
+					"-sn",
+					"-f", "segment",
+					"-segment_format", "mpegts",
+					"-segment_list", hlsFile,
+					"-segment_list_type", "m3u8",
+					"-segment_time", "00:00:03.000",
+					"-maxrate:v:0", "1640000",
+					"-bufsize:v:0", "1280000",
+					"-sc_threshold:v:0", "0",
+					"-keyint_min:v:0", "75",
+					"-r:v:0", "25",
+					"-pix_fmt:v:0", "yuv420p",
+					"-preset:v:0", "veryfast",
+					"-profile:v:0", "high",
+					"-x264opts:v:0", "subme=0:me_range=4:rc_lookahead=10:partitions=none",
+					"-crf:v:0", "23",
+					"-hls_time", "2",
+					"-hls_list_size", "6",
+					"-sn",
+					"-hls_flags", "delete_segments",
+					"-hls_segment_filename", filepath.Join(hlsDir, id+"-%d.ts"),
+					"-index_correction",
+					"-ignore_io_errors",
+					"-use_timeline", "0",
+					filepath.Join(hlsDir, id+"-%d.ts"),
+				)
+			} else {
+					cmd = exec.CommandContext(ctx,
 					"ffmpeg",
 					"-i",
 					inputUrl,
