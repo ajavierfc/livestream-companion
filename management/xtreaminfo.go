@@ -14,11 +14,11 @@ type UserInfo struct {
 	Status              string   `json:"status"`
 	ExpirationDate      string   `json:"exp_date"`
 	IsTrial             string   `json:"is_trial"`
-	ActiveConnections   string   `json:"active_cons"`
 	CreatedAt           string   `json:"created_at"`
 	MaxConnections      string   `json:"max_connections"`
 	AllowedOutputFormats []string `json:"allowed_output_formats"`
 }
+//ActiveConnections   string   `json:"active_cons"`
 
 // Structure for server information
 type ServerInfo struct {
