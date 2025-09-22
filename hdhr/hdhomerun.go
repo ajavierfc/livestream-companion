@@ -25,8 +25,8 @@ func DiscoverHandler(c *gin.Context) {
 		"FirmwareVersion": "20150826",
 		"DeviceID":        "12345678",
 		"DeviceAuth":      "test1234",
-		"BaseURL":         "http://192.168.0.17:5004",
-		"LineupURL":       "http://192.168.0.17:5004/lineup.json",
+		"BaseURL":         "http://localhost:5004",
+		"LineupURL":       "http://localhost:5004/lineup.json",
 	})
 }
 
