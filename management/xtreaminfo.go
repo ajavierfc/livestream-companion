@@ -18,7 +18,7 @@ type UserInfo struct {
 	MaxConnections      string   `json:"max_connections"`
 	AllowedOutputFormats []string `json:"allowed_output_formats"`
 }
-//ActiveConnections   string   `json:"active_cons"`
+//	ActiveConnections   string   `json:"active_cons"`
 
 // Structure for server information
 type ServerInfo struct {
