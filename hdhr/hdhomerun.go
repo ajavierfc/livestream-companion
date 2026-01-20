@@ -17,6 +17,8 @@ type Stream struct {
 }
 
 func DiscoverHandler(c *gin.Context) {
+	host := c.Request.Host
+
 	c.JSON(http.StatusOK, gin.H{
 		"FriendlyName":    "muxpie",
 		"Manufacturer":    "Silicondust",
@@ -25,8 +27,8 @@ func DiscoverHandler(c *gin.Context) {
 		"FirmwareVersion": "20150826",
 		"DeviceID":        "12345678",
 		"DeviceAuth":      "test1234",
-		"BaseURL":         "http://localhost:5004",
-		"LineupURL":       "http://localhost:5004/lineup.json",
+		"BaseURL":         "http://" + host,
+		"LineupURL":       "http://" + host + "/lineup.json",
 	})
 }
 
