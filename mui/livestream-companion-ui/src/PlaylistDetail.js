@@ -1,6 +1,6 @@
 import React, { useState, useContext, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import axios from 'axios';
+import axios from './axiosSetup';
 import { Alert, Box, TextField, Select, MenuItem, Checkbox, FormControl, InputLabel, Button, FormControlLabel, Typography } from '@mui/material';
 import { Grid } from '@mui/material';
 import IconButton from '@mui/material/IconButton';

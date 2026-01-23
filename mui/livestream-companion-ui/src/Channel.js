@@ -9,7 +9,7 @@ import AppBar from '@mui/material/AppBar';
 import { SnackbarContext } from './SnackbarContext';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import axios from 'axios';
+import axios from './axiosSetup';
 import mpegts from 'mpegts.js';
 import { copyToClipboard } from './App';
 
@@ -111,10 +111,13 @@ const Channels = () => {
 
   const createPlayer = useCallback(() => {
     if (currentChannel && videoRef.current) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('secure');
+
       const playerInstance = mpegts.createPlayer({
         type: 'mpegts',
         isLive: true,
-        url: `/hls/${currentChannel.ID}.ts?webbrowser=true`,
+        url: `/hls/${currentChannel.ID}.ts?webbrowser=true${token ? `&secure=${token}` : ''}`,
       });
   
       playerInstance.attachMediaElement(videoRef.current);
@@ -151,7 +154,9 @@ const Channels = () => {
   };
 
   const copyStreamLink = (channel) => {
-    copyToClipboard(`${document.location.origin}/hls/${channel.ID}.ts`);
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('secure');
+    copyToClipboard(`${document.location.origin}/hls/${channel.ID}.ts${token ? `?secure=${token}` : ''}`);
     openSnackbar('Stream link sent to clipboard');
   }
   

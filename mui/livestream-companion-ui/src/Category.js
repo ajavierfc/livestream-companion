@@ -6,7 +6,7 @@ import CloseIcon from '@mui/icons-material/Close';
 import AppBar from '@mui/material/AppBar';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import axios from 'axios';
+import axios from './axiosSetup';
 
 const Categories = () => {
   const [playlists, setPlaylists] = useState([]);

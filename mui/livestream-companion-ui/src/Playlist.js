@@ -13,7 +13,7 @@ import Fab from '@mui/material/Fab';
 import AddIcon from '@mui/icons-material/Add';
 import { useTheme } from '@mui/material/styles';
 import useMediaQuery from '@mui/material/useMediaQuery';
-import axios from 'axios';
+import axios from './axiosSetup';
 
 
 const DeleteButton = ({ playlistId, onDeletion, onSnackbarOpen }) => {
