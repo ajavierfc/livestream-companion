@@ -4,3 +4,5 @@ mui/livestream-companion-ui/node_modules/
 livestream-companion
 livestream-companion-pi
 log
+*.goE
+*.swp
