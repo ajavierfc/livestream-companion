@@ -26,7 +26,7 @@ type Stream struct {
 func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 	ctx := c.Request.Context()
 
-	hlsDir := "/tmp"
+	hlsDir := "./tmp"
 	hlsFile := filepath.Join(hlsDir, id+".m3u8")
 
 	cleanupTsFiles(hlsDir, id)
