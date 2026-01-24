@@ -38,11 +38,11 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 			if webbrowser == "true" {
 				log.Println("Converting audio for web browser compatibility.")
 				cmd = exec.CommandContext(ctx,
-					"ffmpeg",
+					"./bin/ffmpeg",
 					"-i",
 					inputUrl,
 					"-c:v", "copy",
-					"-c:a", "libtwolame",
+					"-c:a", "libmp3lame",
 					"-f", "hls",
 					"-hls_time", "2",
 					"-hls_list_size", "6",
@@ -57,11 +57,11 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 			} else if webbrowser == "lq" {
 				log.Println("Converting to low quality resolution.")
 				cmd = exec.CommandContext(ctx,
-					"ffmpeg",
+					"./bin/ffmpeg",
 					"-i",
 					inputUrl,
 					"-c:v:0", "libx264",
-					"-c:a:0", "libtwolame",
+					"-c:a:0", "libmp3lame",
 					"-filter_complex", "[0:0]yadif@f1=mode=send_frame:parity=auto:deint=all,scale@f2=width=720:height=574[f2_out0]",
 					"-map", "[f2_out0]",
 					"-map", "0:1",
@@ -93,7 +93,7 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 				)
 			} else {
 					cmd = exec.CommandContext(ctx,
-					"ffmpeg",
+					"./bin/ffmpeg",
 					"-i",
 					inputUrl,
 					"-c", "copy",
