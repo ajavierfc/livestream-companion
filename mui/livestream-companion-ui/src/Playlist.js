@@ -121,27 +121,24 @@ const PlaylistTable = () => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
-  const fetchPlaylists = async () => {
-    const response = await fetch('/api/playlists');
-    return response.json();
-  };
-
   const refreshPlaylists = useCallback(async () => {
-    let playlists = await fetchPlaylists();
-    setRows(playlists);
+    axios.get('/api/playlists').then(response => {
+      let playlists = response.data;
+      setRows(response.data);
 
-    let isImporting = playlists.some(playlist => {
-      if ([0, 1].includes(playlist.ImportStatus)) {
-        return true; // Continue checking if ImportStatus is 0 or 1
-      } else if (playlist.ImportStatus === 2) {
-        return [0, 1].includes(playlist.EpgStatus); // Continue checking if ImportStatus is 2 and EpgStatus is 0 or 1
+      let isImporting = playlists.some(playlist => {
+        if ([0, 1].includes(playlist.ImportStatus)) {
+          return true; // Continue checking if ImportStatus is 0 or 1
+        } else if (playlist.ImportStatus === 2) {
+          return [0, 1].includes(playlist.EpgStatus); // Continue checking if ImportStatus is 2 and EpgStatus is 0 or 1
+        }
+        return false; 
+      });    
+      
+      if (isImporting) {
+        setTimeout(refreshPlaylists, 2000);
       }
-      return false; 
-    });    
-    
-    if (isImporting) {
-      setTimeout(refreshPlaylists, 2000);
-    }
+    });
   }, []);
 
   useEffect(() => {

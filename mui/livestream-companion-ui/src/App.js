@@ -22,7 +22,8 @@ import AppBar from '@mui/material/AppBar';
 import Drawer from '@mui/material/Drawer';
 import useMediaQuery from '@mui/material/useMediaQuery';
 import { useTheme } from '@mui/material/styles';
-import { BrowserRouter as Router, Routes, Route, Link as RouterLink } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import SecureLink from './SecureLink';
 import Home from './Home';
 import Playlist from './Playlist';
 import PlaylistDetail from './PlaylistDetail';
@@ -116,25 +117,25 @@ function AppContent() {
 
       </Box>
       <List>
-        <ListItem button component={RouterLink} to="/" onClick={handleDrawerToggle}>
+        <ListItem button component={SecureLink} to="/" onClick={handleDrawerToggle}>
           <ListItemIcon>
             <HomeIcon color="primary" />
           </ListItemIcon>
           <ListItemText primary="Home" />
         </ListItem>
-        <ListItem button component={RouterLink} to="/playlists" onClick={handleDrawerToggle}>
+        <ListItem button component={SecureLink} to="/playlists" onClick={handleDrawerToggle}>
           <ListItemIcon>
             <ListIcon color="primary" />
           </ListItemIcon>
           <ListItemText primary="Playlists" />
         </ListItem>
-        <ListItem button component={RouterLink} to="/categories" onClick={handleDrawerToggle}>
+        <ListItem button component={SecureLink} to="/categories" onClick={handleDrawerToggle}>
           <ListItemIcon>
             <CategoryIcon color="primary" />
           </ListItemIcon>
           <ListItemText primary="Categories" />
         </ListItem>
-        <ListItem button component={RouterLink} to="/channels" onClick={handleDrawerToggle}>
+        <ListItem button component={SecureLink} to="/channels" onClick={handleDrawerToggle}>
           <ListItemIcon>
             <TvIcon color="primary" />
           </ListItemIcon>
