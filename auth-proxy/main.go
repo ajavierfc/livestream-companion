@@ -3,39 +3,68 @@ package main
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 )
 
-const tokenFile = "last_token.txt"
+type AppData struct {
+	AuthorizedIPs map[string]bool            `json:"authorized_ips"`
+	IpTokens      map[string]map[string]bool `json:"ip_tokens"`
+}
+
+var (
+	data     = AppData{AuthorizedIPs: make(map[string]bool), IpTokens: make(map[string]map[string]bool)}
+	mu       sync.RWMutex
+	dataFile = "auth.json" 
+)
+
 const ntfyURL = "https://ntfy.sh/mytv-X7kgmipX"
 
-func generateToken() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "fallback" + hex.EncodeToString(b[:4])
+func loadData() {
+	file, err := os.ReadFile(dataFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 
+		}
+		log.Printf("Error loading data: %v", err)
+		return
 	}
+	mu.Lock()
+	defer mu.Unlock()
+	json.Unmarshal(file, &data)
+}
+
+func saveData() {
+	mu.RLock()
+	defer mu.RUnlock()
+	bytes, err := json.MarshalIndent(data, "", "  ")
+	if err != nil {
+		log.Printf("Error marshaling data: %v", err)
+		return
+	}
+	os.WriteFile(dataFile, bytes, 0644)
+}
+
+func generateToken() string {
+	b := make([]byte, 12)
+	rand.Read(b)
 	return hex.EncodeToString(b)
 }
 
-func saveToken(token string) {
-	err := os.WriteFile(tokenFile, []byte(token), 0644)
-	if err != nil {
-		log.Printf("Error saving token to file: %v", err)
+func getIP(r *http.Request) string {
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip == "" {
+		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
 	}
-}
-
-func getStoredToken() string {
-	content, err := os.ReadFile(tokenFile)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(content))
+	return strings.TrimSpace(strings.Split(ip, ",")[0])
 }
 
 func main() {
@@ -47,66 +76,135 @@ func main() {
 		log.Fatal("Error: --domain argument is required")
 	}
 
-	http.HandleFunc("/validate", func(w http.ResponseWriter, r *http.Request) {
-		originalURI := r.Header.Get("X-Original-URI")
-		if originalURI == "" {
-			originalURI = "/"
-		}
+	loadData()
 
-		parsedURL, err := url.Parse(originalURI)
-		if err != nil {
-			w.WriteHeader(http.StatusBadRequest)
+	// Route to authorize IPs
+	http.HandleFunc("/auth-ip", func(w http.ResponseWriter, r *http.Request) {
+		// FIXED: Using r.URL.Query()
+		ipToAuth := r.URL.Query().Get("ip")
+		if ipToAuth == "" {
+			http.Error(w, "Missing IP", 400)
 			return
 		}
+		mu.Lock()
+		data.AuthorizedIPs[ipToAuth] = true
+		if data.IpTokens[ipToAuth] == nil {
+			data.IpTokens[ipToAuth] = make(map[string]bool)
+		}
+		mu.Unlock()
+		saveData()
+		fmt.Fprintf(w, "IP %s authorized successfully!", ipToAuth)
+	})
 
-		// --- EXCLUSIONS START ---
+  // Endpoint to revoke IP authorization
+  http.HandleFunc("/revoke-ip", func(w http.ResponseWriter, r *http.Request) {
+    ipToRevoke := r.URL.Query().Get("ip")
+    if ipToRevoke == "" {
+        http.Error(w, "Missing IP parameter", http.StatusBadRequest)
+        return
+    }
+
+    mu.Lock()
+    delete(data.AuthorizedIPs, ipToRevoke)
+    delete(data.IpTokens, ipToRevoke)
+    mu.Unlock()
+
+    saveData()
+
+    log.Printf("Access revoked for IP: %s", ipToRevoke)
+    fmt.Fprintf(w, "Authorization for IP %s has been revoked.", ipToRevoke)
+  })
+
+	http.HandleFunc("/validate", func(w http.ResponseWriter, r *http.Request) {
+		clientIP := getIP(r)
+		originalURI := r.Header.Get("X-Original-URI")
+		parsedURL, _ := url.Parse(originalURI)
 		lowerPath := strings.ToLower(parsedURL.Path)
-		staticExtensions := []string{".ico", ".png", ".js", ".css", ".json", ".map"}
-		
-		isStatic := false
-		for _, ext := range staticExtensions {
+
+		// 1. Exclusions
+		staticExts := []string{".js", ".css", ".png", ".ico", ".json", ".map", ".svg"}
+		for _, ext := range staticExts {
 			if strings.HasSuffix(lowerPath, ext) {
-				isStatic = true
-				break
+				w.WriteHeader(http.StatusOK)
+				return
 			}
 		}
 
-		if isStatic {
-			// Allow static assets to pass without token validation
-			w.WriteHeader(http.StatusOK)
+		mu.RLock()
+		isAuthorized := data.AuthorizedIPs[clientIP]
+		mu.RUnlock()
+
+		// 2. IP NOT AUTHORIZED -> 401 Unauthorized
+		if !isAuthorized {
+			authLink := fmt.Sprintf("https://%s/auth-ip?ip=%s", *domain, clientIP)
+      revokeLink := fmt.Sprintf("https://%s/revoke-ip?ip=%s", *domain, clientIP)
+			
+      go func() {
+        message := fmt.Sprintf("Access attempt from unauthorized IP: %s", clientIP)
+        req, _ := http.NewRequest("POST", ntfyURL, strings.NewReader(message))
+        
+        req.Header.Set("Title", "Security Alert - MyTV")
+        req.Header.Set("Priority", "high")
+        req.Header.Set("Tags", "warning,lock")
+        
+        actions := fmt.Sprintf(
+            "view, Authorize IP, %s; view, Revoke IP, %s", 
+            authLink, 
+            revokeLink,
+        )
+        req.Header.Set("Action", actions)
+        
+        client := &http.Client{}
+        resp, _ := client.Do(req)
+        defer resp.Body.Close()
+      }()
+
+			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		// --- EXCLUSIONS END ---
 
+		// 3. IP AUTHORIZED - TOKEN CHECK
 		receivedToken := parsedURL.Query().Get("secure")
-		currentToken := getStoredToken()
+		mu.RLock()
+		validTokens := data.IpTokens[clientIP]
+		tokenIsValid := validTokens[receivedToken]
+		mu.RUnlock()
 
 		if receivedToken == "" {
+			// Transparent redirect with new token linked to this IP
 			newToken := generateToken()
-			saveToken(newToken)
+			mu.Lock()
+			data.IpTokens[clientIP][newToken] = true
+			mu.Unlock()
+			saveData()
 
-			secureURL := fmt.Sprintf("https://%s%s?secure=%s", *domain, parsedURL.Path, newToken)
-
-			payload := strings.NewReader("New access attempt. Link: " + secureURL)
-			req, _ := http.NewRequest("POST", ntfyURL, payload)
-			req.Header.Set("Title", "Security Alert - MyTV")
+			q := parsedURL.Query()
+			q.Set("secure", newToken)
 			
-			go http.DefaultClient.Do(req)
+      newLocation := parsedURL.Path
+      if newLocation == "" {
+          newLocation = "/"
+      }
+      if q.Encode() != "" {
+          newLocation += "?" + q.Encode()
+      }
 
-			w.WriteHeader(http.StatusForbidden)
-			fmt.Fprint(w, "Forbidden: New token generated and sent via ntfy.")
+			w.Header().Set("Location", newLocation)
+			w.WriteHeader(http.StatusTemporaryRedirect) 
 			return
 		}
 
-		if receivedToken == currentToken {
+		// Valid token for this IP
+		if tokenIsValid {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
 
+		// 4. IP AUTHORIZED BUT TOKEN INVALID -> 403 Forbidden
 		w.WriteHeader(http.StatusForbidden)
-		fmt.Fprint(w, "Forbidden: Invalid token.")
+		fmt.Fprint(w, "Forbidden: Invalid token for this IP.")
 	})
 
-	log.Printf("Auth server running on :%d for domain %s", *port, *domain)
+	log.Printf("Auth server running on :%d with %s", *port, dataFile)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), nil))
 }
