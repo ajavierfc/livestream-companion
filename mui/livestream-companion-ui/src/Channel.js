@@ -1,10 +1,9 @@
 import React, { useRef, useState, useEffect, useCallback, useContext } from 'react';
 import { Grid, Container, Box, Typography, TableContainer, Table, TableBody, Paper, TableCell, TableHead, TableRow, Toolbar, Button, TextField, Select, MenuItem, IconButton, Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
-import CheckIcon from '@mui/icons-material/Check';
-import CloseIcon from '@mui/icons-material/Close';
 import LinkIcon from '@mui/icons-material/Link';
 import LiveTvIcon from '@mui/icons-material/LiveTv';
+import VLCIcon from './VLCIcon';
 import AppBar from '@mui/material/AppBar';
 import { SnackbarContext } from './SnackbarContext';
 import { useTheme } from '@mui/material/styles';
@@ -68,18 +67,6 @@ const Channels = () => {
       fetchChannels();
     }
   }, [selectedPlaylistId, selectedCategoryId, fetchChannels]);  
-
-  const onToggleActive = (channel) => {
-    const updatedChannel = { ...channel, Active: !channel.Active };
-    axios.put("/api/channel/" + updatedChannel.ID, updatedChannel);
-    const updatedChannels = channels.map(ch => {
-      if (ch.ID === updatedChannel.ID) {
-        return updatedChannel;
-      }
-      return ch;
-    });
-    setChannels(updatedChannels);
-  };
 
   const onActivateAll = (playlistID, categoryID) => {
     if (categoryID === "all") {
@@ -153,10 +140,20 @@ const Channels = () => {
     setOpenDialog(true);
   };
 
-  const copyStreamLink = (channel) => {
+  const getChannelUrl = (channel) => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('secure');
-    copyToClipboard(`${document.location.origin}/hls/${channel.ID}.ts${token ? `?secure=${token}` : ''}`);
+    return `${document.location.origin}/hls/${channel.ID}.ts${token ? `?secure=${token}` : ''}`;
+  }
+
+  const playStreamInVlc = (channel) => {
+    const originalUrl = getChannelUrl(channel);
+    const intentUrl = `intent://${originalUrl.replace(/^https?:\/\//, '')}#Intent;scheme=http;package=org.videolan.vlc;end`;
+    window.location.href = intentUrl;
+  }
+
+  const copyStreamLink = (channel) => {
+    copyToClipboard(getChannelUrl(channel));
     openSnackbar('Stream link sent to clipboard');
   }
   
@@ -233,18 +230,18 @@ const Channels = () => {
                         <Grid item xs={12}>Status:
                           <Box display='flex' justifyContent='space-between' width='95%'>
                             <Box>
-                              <IconButton onClick={() => onToggleActive(channel)}>
-                                {channel.Active ? <CheckIcon /> : <CloseIcon />}
-                              </IconButton>
-                            </Box>
-                            <Box>
-                              <IconButton onClick={() => copyStreamLink(channel)}>
-                                <LinkIcon />
+                              <IconButton onClick={() => playStreamInVlc(channel)}>
+                                <VLCIcon /> 
                               </IconButton>
                             </Box>
                             <Box>
                               <IconButton onClick={() => playStream(channel)}>
                                 <LiveTvIcon /> 
+                              </IconButton>
+                            </Box>
+                            <Box>
+                              <IconButton onClick={() => copyStreamLink(channel)}>
+                                <LinkIcon />
                               </IconButton>
                             </Box>
                           </Box>
@@ -263,8 +260,8 @@ const Channels = () => {
                   <TableRow>
                     <TableCell>ID</TableCell>
                     <TableCell>Channel Name</TableCell>
-                    <TableCell>Status</TableCell>
                     <TableCell>Play</TableCell>
+                    <TableCell>Open</TableCell>
                     <TableCell>Link</TableCell>
                   </TableRow>
                 </TableHead>
@@ -274,8 +271,8 @@ const Channels = () => {
                       <TableCell>{channel.ID}</TableCell>
                       <TableCell>{channel.name}</TableCell>
                       <TableCell>
-                        <IconButton onClick={() => onToggleActive(channel)}>
-                          {channel.Active ? <CheckIcon /> : <CloseIcon />}
+                        <IconButton onClick={() => playStreamInVlc(channel)}>
+                          <VLCIcon /> 
                         </IconButton>
                       </TableCell>
                       <TableCell>
@@ -284,7 +281,7 @@ const Channels = () => {
                         </IconButton>
                       </TableCell>
                       <TableCell>
-                        <IconButton onClick={() => copyStreamLink(channel)}>
+                        <IconButton onClick={() => copyStreamLink(channel, true)}>
                           <LinkIcon />
                         </IconButton>
                       </TableCell>
