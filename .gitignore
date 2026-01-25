@@ -3,6 +3,7 @@ ui/
 mui/livestream-companion-ui/node_modules/
 livestream-companion
 livestream-companion-pi
+auth-proxy-service
 log/
 bin/
 tmp/
