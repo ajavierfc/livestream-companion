@@ -84,7 +84,6 @@ func main() {
 
     // Route to authorize IPs
     http.HandleFunc("/auth-ip", func(w http.ResponseWriter, r *http.Request) {
-        // FIXED: Using r.URL.Query()
         ipToAuth := r.URL.Query().Get("ip")
         if ipToAuth == "" {
             http.Error(w, "Missing IP", 400)
@@ -97,7 +96,32 @@ func main() {
         }
         mu.Unlock()
         saveData()
-        fmt.Fprintf(w, "IP %s authorized successfully!", ipToAuth)
+
+        accessLink := fmt.Sprintf("https://%s", *domain)
+        revokeLink := fmt.Sprintf("https://%s/revoke-ip?ip=%s", *domain, ipToAuth)
+
+        go func() {
+            message := fmt.Sprintf("Authorized IP: %s", ipToAuth)
+            req, _ := http.NewRequest("POST", *ntfyURL, strings.NewReader(message))
+
+            req.Header.Set("Title", "Security Alert - MyTV")
+            req.Header.Set("Priority", "default")
+            req.Header.Set("Tags", "white_check_mark")
+
+            actions := fmt.Sprintf(
+                "view, Access MyTV, %s; view, Revoke IP, %s",
+                accessLink,
+                revokeLink,
+            )
+            req.Header.Set("Action", actions)
+
+            client := &http.Client{}
+            resp, _ := client.Do(req)
+            defer resp.Body.Close()
+        }()
+
+        log.Printf("IP %s authorized. Redirecting to home...", ipToAuth)
+        http.Redirect(w, r, "/", http.StatusSeeOther)
     })
 
     // Endpoint to revoke IP authorization
@@ -141,21 +165,16 @@ func main() {
         // 2. IP NOT AUTHORIZED -> 401 Unauthorized
         if !isAuthorized {
             authLink := fmt.Sprintf("https://%s/auth-ip?ip=%s", *domain, clientIP)
-            revokeLink := fmt.Sprintf("https://%s/revoke-ip?ip=%s", *domain, clientIP)
 
             go func() {
                 message := fmt.Sprintf("Access attempt from unauthorized IP: %s", clientIP)
                 req, _ := http.NewRequest("POST", *ntfyURL, strings.NewReader(message))
 
                 req.Header.Set("Title", "Security Alert - MyTV")
-                req.Header.Set("Priority", "high")
-                req.Header.Set("Tags", "warning,lock")
+                req.Header.Set("Priority", "default")
+                req.Header.Set("Tags", "lock")
 
-                actions := fmt.Sprintf(
-                    "view, Authorize IP, %s; view, Revoke IP, %s",
-                    authLink,
-                    revokeLink,
-                )
+                actions := fmt.Sprintf("view, Authorize IP, %s", authLink)
                 req.Header.Set("Action", actions)
 
                 client := &http.Client{}
