@@ -69,6 +69,7 @@ func main() {
     port := flag.Int("port", 8000, "Port to listen on")
     domain := flag.String("domain", "", "Public domain (required)")
     ntfyURL := flag.String("ntfy", "", "full ntfy url with topic (required)")
+    tokenValidation := flag.Bool("token-auth", false, "Enable token-based validation and generation")
     flag.Parse()
 
     if *domain == "" {
@@ -166,7 +167,13 @@ func main() {
             return
         }
 
-        // 3. IP AUTHORIZED - TOKEN CHECK
+        // 3. STOP IF NOT TOKEN VALIDATION
+        if !*tokenValidation {
+            w.WriteHeader(http.StatusOK)
+            return
+        }
+
+        // 4. IP AUTHORIZED - TOKEN CHECK
         receivedToken := parsedURL.Query().Get("secure")
         mu.RLock()
         validTokens := data.IpTokens[clientIP]
@@ -203,7 +210,7 @@ func main() {
             return
         }
 
-        // 4. IP AUTHORIZED BUT TOKEN INVALID -> 403 Forbidden
+        // 5. IP AUTHORIZED BUT TOKEN INVALID -> 403 Forbidden
         w.WriteHeader(http.StatusForbidden)
         fmt.Fprint(w, "Forbidden: Invalid token for this IP.")
     })
