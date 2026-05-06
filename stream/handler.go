@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -23,8 +24,34 @@ type Stream struct {
 	Client   http.ResponseWriter
 }
 
+type reHijackWriter struct {
+	gin.ResponseWriter
+	conn *net.TCPConn
+}
+
+func (w *reHijackWriter) Write(b []byte) (int, error) {
+	n, err := w.conn.Write(b)
+	if err != nil {
+			// Aquí detectas la desconexión REAL
+			return n, err
+	}
+	return n, nil
+}
+
 func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 	ctx := c.Request.Context()
+
+	if hj, ok := c.Writer.(http.Hijacker); ok {
+    conn, _, err := hj.Hijack()
+    if err == nil {
+        tcpConn := conn.(*net.TCPConn)
+        tcpConn.SetKeepAlive(true)
+        tcpConn.SetKeepAlivePeriod(5 * time.Second)
+
+        // Volvemos a envolver el writer para seguir usando Gin
+        c.Writer = &reHijackWriter{ResponseWriter: c.Writer, conn: tcpConn}
+    }
+	}
 
 	hlsDir := "./tmp"
 	hlsFile := filepath.Join(hlsDir, id+".m3u8")
@@ -33,7 +60,13 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 
 	// Start the FFMPEG command
 	go func() {
-		for {
+			select {
+			case <-ctx.Done():
+					log.Println("Client disconnected before starting ffmpeg")
+					return
+			default:
+			}
+
 			var cmd *exec.Cmd
 			if webbrowser == "true" {
 				log.Println("Converting audio for web browser compatibility.")
@@ -126,7 +159,6 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 			default:
 				// Client is still connected, so we continue the loop and start FFMPEG again.
 			}
-		}
 	}()
 
 	w := c.Writer
@@ -167,8 +199,12 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 						}
 
 						// Write to the HTTP ResponseWriter from the segment file
-						io.Copy(w, segment)
+						_, err = io.Copy(w, segment)
 						segment.Close()
+						if err != nil {
+							log.Println("Client disconnected:", err)
+							return
+					  }
 
 						// Delete the segment file
 						if err = os.Remove(filePath); err != nil {
