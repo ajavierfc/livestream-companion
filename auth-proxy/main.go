@@ -1,6 +1,7 @@
 package main
 
 import (
+	"auth/geo"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -166,21 +167,23 @@ func main() {
         if !isAuthorized {
             authLink := fmt.Sprintf("https://%s/auth-ip?ip=%s", *domain, clientIP)
 
-            go func() {
-                message := fmt.Sprintf("Access attempt from unauthorized IP: %s", clientIP)
-                req, _ := http.NewRequest("POST", *ntfyURL, strings.NewReader(message))
+            if geo.IsSpanishIP(clientIP) {
+                go func() {
+                    message := fmt.Sprintf("Access attempt from unauthorized IP: %s", clientIP)
+                    req, _ := http.NewRequest("POST", *ntfyURL, strings.NewReader(message))
 
-                req.Header.Set("Title", "Security Alert - MyTV")
-                req.Header.Set("Priority", "default")
-                req.Header.Set("Tags", "lock")
+                    req.Header.Set("Title", "Security Alert - MyTV")
+                    req.Header.Set("Priority", "default")
+                    req.Header.Set("Tags", "lock")
 
-                actions := fmt.Sprintf("view, Authorize IP, %s", authLink)
-                req.Header.Set("Action", actions)
+                    actions := fmt.Sprintf("view, Authorize IP, %s", authLink)
+                    req.Header.Set("Action", actions)
 
-                client := &http.Client{}
-                resp, _ := client.Do(req)
-                defer resp.Body.Close()
-            }()
+                    client := &http.Client{}
+                    resp, _ := client.Do(req)
+                    defer resp.Body.Close()
+                }()
+            }
 
             w.WriteHeader(http.StatusUnauthorized)
             return
@@ -235,5 +238,6 @@ func main() {
     })
 
     log.Printf("Auth server running on :%d with %s", *port, dataFile)
+    log.Print("Remember that this service requires geooiplookup: sudo apt install geoip-bin geoip-database")
     log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), nil))
 }
