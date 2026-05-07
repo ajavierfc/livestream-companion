@@ -7,12 +7,10 @@ import (
 	"sync"
 )
 
-var (
-	rangeCache = make(map[string]bool)
-	rangeMu    sync.RWMutex
-)
+var ipCache = make(map[string]bool)
+var cacheMu sync.RWMutex
 
-// getIPRange extrae los primeros 3 octetos de una IPv4
+// getIPRange extracts the first 3 octets of an IPv4 address
 func getIPRange(ip string) string {
 	parts := strings.Split(ip, ".")
 	if len(parts) < 3 {
@@ -21,40 +19,36 @@ func getIPRange(ip string) string {
 	return strings.Join(parts[:3], ".")
 }
 
-// IsSpanishIP chequea si una IP es de España con caché por rango /24
+// IsSpanishIP checks if an IP is from Spain using a /24 range cache
 func IsSpanishIP(ipStr string) bool {
 	ipRange := getIPRange(ipStr)
 
-	// 1. Check caché
-	rangeMu.RLock()
-	isES, exists := rangeCache[ipRange]
-	rangeMu.RUnlock()
-
+	// 1. Check cache
+	cacheMu.RLock()
+	isES, exists := ipCache[ipRange]
+	cacheMu.RUnlock()
 	if exists {
 		return isES
 	}
 
-	// 2. Si no está en caché, ejecutar comando de sistema
-	// Usamos geoiplookup (requiere apt install geoip-bin)
+	// 2. If not in cache, run system command (requirement: apt install geoip-bin geoip-database)
 	out, err := exec.Command("geoiplookup", ipStr).Output()
-	
 	currentIsES := false
 	if err == nil {
 		output := string(out)
-		// El comando suele devolver "GeoIP Country Edition: ES, Spain"
+		// The command usually returns "GeoIP Country Edition: ES, Spain"
 		if strings.Contains(output, " ES,") {
 			currentIsES = true
 		}
 	} else {
 		log.Printf("GeoIP Error: %v. Is geoip-bin installed? (apt install geoip-bin geoip-database)", err)
-		return true // Por seguridad, si falla el comando, notificamos
+		return true // For security, notify if the command fails
 	}
 
-	// 3. Guardar en caché
-	rangeMu.Lock()
-	rangeCache[ipRange] = currentIsES
-	rangeMu.Unlock()
-
+	// 3. Store in cache
+	cacheMu.Lock()
+	ipCache[ipRange] = currentIsES
+	cacheMu.Unlock()
 	log.Printf("GeoIP Lookup: IP %s -> Range %s.0/24 -> Spain: %v", ipStr, ipRange, currentIsES)
 	return currentIsES
 }
