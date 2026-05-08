@@ -16,6 +16,7 @@ var cacheMu sync.RWMutex
 func UpdateGeoIP() {
 	if err := os.Chdir("/usr/share/GeoIP/"); err != nil {
 		log.Printf("Warning: Failed to change directory to /usr/share/GeoIP/: %v", err)
+		log.Print("Warning: geooiplookup is required -> sudo apt install geoip-bin geoip-database")
 		return
 	}
 

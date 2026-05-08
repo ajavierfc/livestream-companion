@@ -244,6 +244,5 @@ func main() {
     })
 
     log.Printf("Auth server running on :%d with %s", *port, dataFile)
-    log.Print("Remember that this service requires geooiplookup: sudo apt install geoip-bin geoip-database")
     log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", *port), nil))
 }
