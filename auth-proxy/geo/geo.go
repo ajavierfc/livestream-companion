@@ -2,6 +2,7 @@ package geo
 
 import (
 	"log"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -9,6 +10,27 @@ import (
 
 var ipCache = make(map[string]bool)
 var cacheMu sync.RWMutex
+
+// UpdateGeoIP updates the GeoIP database by downloading and extracting the latest GeoIP.dat file.
+// It logs a warning if the update fails but does not stop the service.
+func UpdateGeoIP() {
+	if err := os.Chdir("/usr/share/GeoIP/"); err != nil {
+		log.Printf("Warning: Failed to change directory to /usr/share/GeoIP/: %v", err)
+		return
+	}
+
+	if err := exec.Command("wget", "-N", "https://mailfud.org/geoip-legacy/GeoIP.dat.gz").Run(); err != nil {
+		log.Printf("Warning: Failed to download GeoIP.dat.gz: %v", err)
+		return
+	}
+
+	if err := exec.Command("gunzip", "-f", "GeoIP.dat.gz").Run(); err != nil {
+		log.Printf("Warning: Failed to extract GeoIP.dat.gz: %v", err)
+		return
+	}
+
+	log.Println("GeoIP database updated successfully")
+}
 
 // getIPRange extracts the first 3 octets of an IPv4 address
 func getIPRange(ip string) string {

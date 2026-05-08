@@ -73,6 +73,8 @@ func main() {
     tokenValidation := flag.Bool("token-auth", false, "Enable token-based validation and generation")
     flag.Parse()
 
+    geo.UpdateGeoIP()
+
     if *domain == "" {
         log.Fatal("Error: --domain argument is required")
     }
