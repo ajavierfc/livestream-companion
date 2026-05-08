@@ -119,8 +119,10 @@ func main() {
             req.Header.Set("Action", actions)
 
             client := &http.Client{}
-            resp, _ := client.Do(req)
-            defer resp.Body.Close()
+            resp, err := client.Do(req)
+            if err == nil {
+                defer resp.Body.Close()
+            }
         }()
 
         log.Printf("IP %s authorized. Redirecting to home...", ipToAuth)
@@ -182,8 +184,10 @@ func main() {
                     req.Header.Set("Action", actions)
 
                     client := &http.Client{}
-                    resp, _ := client.Do(req)
-                    defer resp.Body.Close()
+                    resp, err := client.Do(req)
+                    if err == nil {
+                        defer resp.Body.Close()
+                    }
                 }()
             }
 
