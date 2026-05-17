@@ -387,10 +387,12 @@ func RestreamingHandler(c *gin.Context) {
 }
 
 func StreamHandler(c *gin.Context) {
-	base := filepath.Base(c.Param("path"))             // Get the last element of the path
-	id := strings.TrimSuffix(base, filepath.Ext(base)) // Remove the extension
+	base := filepath.Base(c.Param("path"))
+	id := strings.TrimSuffix(base, filepath.Ext(base))
+	ext := strings.ToLower(filepath.Ext(base))
 
-	if strings.HasSuffix(c.Param("path"), ".ts") {
+	switch ext {
+	case ".m3u8":
 		idInt, err := strconv.Atoi(id)
 		if err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
@@ -398,7 +400,26 @@ func StreamHandler(c *gin.Context) {
 		}
 		idUInt := uint(idInt)
 
-		// Fetch the channel by ID
+		channel, err := GetChannelByID(idUInt)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+
+		stream.HandleM3U8(c, channel.StreamURL, id)
+	case ".ts":
+		if strings.Contains(id, "-") {
+			stream.HandleTSegment(c, base)
+			return
+		}
+
+		idInt, err := strconv.Atoi(id)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid ID"})
+			return
+		}
+		idUInt := uint(idInt)
+
 		channel, err := GetChannelByID(idUInt)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -407,8 +428,9 @@ func StreamHandler(c *gin.Context) {
 
 		webbrowser := c.DefaultQuery("webbrowser", "false")
 		stream.HandleTS(c, channel.StreamURL, id, webbrowser)
+	default:
+		c.Status(http.StatusNotFound)
 	}
-
 }
 
 func GetEPG(c *gin.Context) {
