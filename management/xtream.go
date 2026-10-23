@@ -1,6 +1,7 @@
 package management
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,7 +11,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type CategoryInfo struct {
@@ -21,12 +22,30 @@ type CategoryInfo struct {
 
 func handleError(playlist *Playlist, err error) bool {
 	if err != nil {
-		log.Print(err)
-		playlist.ImportStatus = -1
-		playlist.Update();
+		markImportFailed(playlist, err)
 		return true
 	}
 	return false
+}
+
+func markImportFailed(playlist *Playlist, cause error) {
+	log.Print(cause)
+	playlist.ImportStatus = -1
+	playlist.ImportMessage = "Error: " + cause.Error()
+	if err := playlist.Update(); err != nil {
+		log.Printf("Failed to update playlist %d import status: %v", playlist.ID, err)
+	}
+}
+
+func reportImportProgress(playlist *Playlist, progress, total int, message string) error {
+	playlist.ImportProgress = progress
+	playlist.ImportTotal = total
+	playlist.ImportMessage = message
+	log.Printf("[playlist %d] %s", playlist.ID, message)
+	if err := playlist.Update(); err != nil {
+		return fmt.Errorf("update playlist import progress: %w", err)
+	}
+	return nil
 }
 
 func ImportXtream(c *gin.Context, ID uint) {
@@ -42,9 +61,10 @@ func ImportXtream(c *gin.Context, ID uint) {
 
 	startTime := time.Now()
 	playlist.ImportStatus = 1
-	err = playlist.Update()
-	if err != nil {
-		log.Print(err)
+	playlist.ImportProgress = 0
+	playlist.ImportTotal = 0
+	if err := reportImportProgress(playlist, 0, 0, "Starting playlist import"); err != nil {
+		markImportFailed(playlist, err)
 		return
 	}
 
@@ -59,9 +79,17 @@ func ImportXtream(c *gin.Context, ID uint) {
 		scheme = "https"
 	}
 
+	if err := reportImportProgress(playlist, 0, 0, "Checking playlist server information"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
 	var xtreamInfo XtreamInfo
 	xtreamInfo, err = GetXtreamServerInfo(playlist)
 	if handleError(playlist, err) {
+		return
+	}
+	if err := reportImportProgress(playlist, 0, 0, "Playlist server information received"); err != nil {
+		markImportFailed(playlist, err)
 		return
 	}
 
@@ -85,28 +113,36 @@ func ImportXtream(c *gin.Context, ID uint) {
 		categoryListURL = fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_live_categories", baseURL, username, password)
 	}
 
+	if err := reportImportProgress(playlist, 0, 0, "Downloading playlist categories"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
 	categoryListResp, err := http.Get(categoryListURL)
 	if err != nil {
-		log.Print(err)
-		playlist.ImportStatus = -1
-		playlist.Update()
+		markImportFailed(playlist, fmt.Errorf("download playlist categories: %w", err))
 		return
 	}
 	defer categoryListResp.Body.Close()
 
 	categoriesBody, err := io.ReadAll(categoryListResp.Body)
 	if err != nil {
-		log.Print(err)
-		playlist.ImportStatus = -1
-		playlist.Update()
+		markImportFailed(playlist, fmt.Errorf("read playlist categories: %w", err))
 		return
 	}
+	categoriesPath, categoriesSize, err := saveImportSnapshot(ID, "categories.json", bytes.NewReader(categoriesBody))
+	if err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	log.Printf("[playlist %d] Saved categories response (%d bytes) to %s", ID, categoriesSize, categoriesPath)
 
 	var categoriesResponse []Category
 	if err := json.Unmarshal(categoriesBody, &categoriesResponse); err != nil {
-		log.Print(err)
-		playlist.ImportStatus = -1
-		playlist.Update()
+		markImportFailed(playlist, fmt.Errorf("decode playlist categories: %w", err))
+		return
+	}
+	if err := reportImportProgress(playlist, 0, 0, fmt.Sprintf("Received %d categories", len(categoriesResponse))); err != nil {
+		markImportFailed(playlist, err)
 		return
 	}
 
@@ -117,167 +153,305 @@ func ImportXtream(c *gin.Context, ID uint) {
 		streamListURL = fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_live_streams", baseURL, username, password)
 	}
 
+	if err := reportImportProgress(playlist, 0, 0, "Downloading channel list"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
 	streamListResp, err := http.Get(streamListURL)
 	if err != nil {
-		log.Print(err)
-		playlist.ImportStatus = -1
-		playlist.Update()
+		markImportFailed(playlist, fmt.Errorf("download channel list: %w", err))
 		return
 	}
 	defer streamListResp.Body.Close()
 
 	streamsBody, err := io.ReadAll(streamListResp.Body)
 	if err != nil {
-		log.Print(err)
-		playlist.ImportStatus = -1
-		playlist.Update()
+		markImportFailed(playlist, fmt.Errorf("read channel list: %w", err))
 		return
 	}
+	channelsPath, channelsSize, err := saveImportSnapshot(ID, "channels.json", bytes.NewReader(streamsBody))
+	if err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	log.Printf("[playlist %d] Saved channel response (%d bytes) to %s", ID, channelsSize, channelsPath)
 
 	var channelsResponse []Channel
 	if err := json.Unmarshal(streamsBody, &channelsResponse); err != nil {
-		log.Print(err)
-		playlist.ImportStatus = -1
-		playlist.Update()
+		markImportFailed(playlist, fmt.Errorf("decode channel list: %w", err))
 		return
+	}
+	if err := reportImportProgress(playlist, 0, len(channelsResponse), fmt.Sprintf("Decoded %d channels; preparing categories", len(channelsResponse))); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+
+	const batchSize = 500
+	if err := reportImportProgress(playlist, 0, len(channelsResponse), "Loading existing playlist categories"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	categoriesByExternalID := make(map[string]Category, len(categoriesResponse))
+	if !newPlaylist {
+		var existingCategories []Category
+		if err := DB.Where("playlist_id = ?", playlist.ID).Find(&existingCategories).Error; err != nil {
+			markImportFailed(playlist, err)
+			return
+		}
+		for _, category := range existingCategories {
+			if _, exists := categoriesByExternalID[category.ExternalID]; !exists {
+				categoriesByExternalID[category.ExternalID] = category
+			}
+		}
 	}
 
 	var categoriesToCreate []Category
 	var categoriesToUpdate []Category
-	var channelsToCreate []Channel
-	var channelsToUpdate []Channel
-	var hdhrChannelNum = 1000
-	var batchSize = 500
-
 	for i, category := range categoriesResponse {
-		var dbCategory Category
-		var err error
-		if !newPlaylist {
-			err = DB.Model(Category{}).Where("external_id = ? and playlist_id = ?", category.ExternalID, playlist.ID).First(&dbCategory).Error
-		}
-		if newPlaylist || err == gorm.ErrRecordNotFound {
-			dbCategory.ExternalID = category.ExternalID
-			dbCategory.CategoryName = category.CategoryName
-			dbCategory.Num = i
-			dbCategory.PlaylistID = playlist.ID
-			dbCategory.Active = false
+		dbCategory, exists := categoriesByExternalID[category.ExternalID]
+		if !exists {
+			dbCategory = Category{
+				ExternalID:   category.ExternalID,
+				CategoryName: category.CategoryName,
+				Num:          i,
+				PlaylistID:   playlist.ID,
+				Active:       false,
+			}
 			categoriesToCreate = append(categoriesToCreate, dbCategory)
 			if len(categoriesToCreate) == batchSize {
-				DB.CreateInBatches(categoriesToCreate, batchSize)
+				if err := DB.CreateInBatches(&categoriesToCreate, batchSize).Error; err != nil {
+					markImportFailed(playlist, err)
+					return
+				}
 				categoriesToCreate = categoriesToCreate[:0]
 			}
-		} else {
-			dbCategory.CategoryName = category.CategoryName
-			dbCategory.Num = i
-			categoriesToUpdate = append(categoriesToUpdate, dbCategory)
-			if len(categoriesToUpdate) == batchSize {
-				for _, category := range categoriesToUpdate {
-					DB.Save(&category)
-				}
-				categoriesToUpdate = categoriesToUpdate[:0]
-			}
+			continue
 		}
 
+		dbCategory.CategoryName = category.CategoryName
+		dbCategory.Num = i
+		categoriesToUpdate = append(categoriesToUpdate, dbCategory)
+		if len(categoriesToUpdate) == batchSize {
+			if err := saveCategoriesInBatches(categoriesToUpdate, batchSize); err != nil {
+				markImportFailed(playlist, err)
+				return
+			}
+			categoriesToUpdate = categoriesToUpdate[:0]
+		}
 	}
 
-	// Handle remaining categories
-	DB.CreateInBatches(categoriesToCreate, len(categoriesToCreate))
-	for _, category := range categoriesToUpdate {
-		DB.Save(&category)
+	if len(categoriesToCreate) > 0 {
+		if err := DB.CreateInBatches(&categoriesToCreate, batchSize).Error; err != nil {
+			markImportFailed(playlist, err)
+			return
+		}
+	}
+	if err := saveCategoriesInBatches(categoriesToUpdate, batchSize); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	if err := reportImportProgress(playlist, 0, len(channelsResponse), fmt.Sprintf("Synchronized %d categories", len(categoriesResponse))); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+
+	var categories []Category
+	if err := reportImportProgress(playlist, 0, len(channelsResponse), "Loading category identifiers"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	if err := DB.Where("playlist_id = ?", playlist.ID).Find(&categories).Error; err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	categoryIDByExternalID := make(map[string]uint, len(categories))
+	for _, category := range categories {
+		if _, exists := categoryIDByExternalID[category.ExternalID]; !exists {
+			categoryIDByExternalID[category.ExternalID] = category.ID
+		}
 	}
 
 	// Delete all channels with StreanID = "-1" (Categories fake channels)
-	DB.Where("stream_id = ?", -1).Delete(&Channel{})
-
-	// Get all categories from the database
-	var categories []Category
-	result := DB.Find(&categories)
-	if result.Error != nil {
-		log.Fatal(result.Error)
+	if err := DB.Where("stream_id = ?", -1).Delete(&Channel{}).Error; err != nil {
+		markImportFailed(playlist, err)
+		return
 	}
 
+	if err := reportImportProgress(playlist, 0, len(channelsResponse), "Loading existing playlist channels"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	existingChannelsByKey := make(map[channelImportKey]Channel, len(channelsResponse))
+	if !newPlaylist {
+		var existingChannels []Channel
+		if err := DB.Joins("JOIN categories ON categories.id = channels.category_id").
+			Where("categories.playlist_id = ?", playlist.ID).
+			Find(&existingChannels).Error; err != nil {
+			markImportFailed(playlist, err)
+			return
+		}
+		for _, channel := range existingChannels {
+			key := channelImportKey{categoryID: channel.CategoryID, streamID: channel.StreamID}
+			if _, exists := existingChannelsByKey[key]; !exists {
+				existingChannelsByKey[key] = channel
+			}
+		}
+		log.Printf("[playlist %d] Loaded %d existing channels", playlist.ID, len(existingChannels))
+	}
+
+	if err := reportImportProgress(playlist, 0, len(channelsResponse), fmt.Sprintf("Importing %d channels", len(channelsResponse))); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	var channelsToCreate []Channel
+	var channelsToUpdate []Channel
+	hdhrChannelNum := 1000
+	processedChannels := 0
+	createdChannels := 0
+	updatedChannels := 0
+	skippedChannels := 0
+	reportChannelBatch := func() error {
+		if processedChannels%batchSize != 0 && processedChannels != len(channelsResponse) {
+			return nil
+		}
+		if err := flushChannelImportBatches(&channelsToCreate, &channelsToUpdate, batchSize); err != nil {
+			return err
+		}
+		message := fmt.Sprintf(
+			"Imported %d/%d channels (created %d, updated %d, skipped %d)",
+			processedChannels, len(channelsResponse), createdChannels, updatedChannels, skippedChannels,
+		)
+		return reportImportProgress(playlist, processedChannels, len(channelsResponse), message)
+	}
 	for _, channel := range channelsResponse {
-		var category Category
-		var dbChannel Channel
-		var err error = DB.Model(Category{}).Where("external_id = ? and playlist_id = ?", channel.ExternalCategoryID, playlist.ID).First(&category).Error
-		if err == gorm.ErrRecordNotFound {
-			log.Print(err)
+		processedChannels++
+		categoryID, exists := categoryIDByExternalID[channel.ExternalCategoryID]
+		if !exists {
+			skippedChannels++
+			if err := reportChannelBatch(); err != nil {
+				markImportFailed(playlist, err)
+				return
+			}
 			continue
 		}
-		if !newPlaylist {
-			err = DB.Model(Channel{}).Where("stream_id = ? and category_id = ?", channel.StreamID, category.ID).First(&dbChannel).Error
+
+		key := channelImportKey{categoryID: categoryID, streamID: channel.StreamID}
+		dbChannel, exists := existingChannelsByKey[key]
+		dbChannel.Num = channel.Num
+		dbChannel.Name = channel.Name
+		dbChannel.CategoryID = categoryID
+		dbChannel.ExternalCategoryID = channel.ExternalCategoryID
+		dbChannel.StreamID = channel.StreamID
+		if playlist.Type == "m3u" {
+			dbChannel.StreamURL = channel.StreamURL
+		} else {
+			dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.%s", baseURL, username, password, channel.StreamID, streamFormat)
 		}
-		if newPlaylist || err == gorm.ErrRecordNotFound {
-			dbChannel.Num = channel.Num
-			dbChannel.Name = channel.Name
-			dbChannel.CategoryID = category.ID
-			dbChannel.ExternalCategoryID = channel.ExternalCategoryID
-			dbChannel.StreamID = channel.StreamID
-			if playlist.Type == "m3u" {
-				dbChannel.StreamURL = channel.StreamURL
-			} else {
-				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.%s", baseURL, username, password, channel.StreamID, streamFormat)
-			}
-			dbChannel.EpgChannelID = channel.EpgChannelID
-			dbChannel.HDHRChannelNum = hdhrChannelNum
-			dbChannel.StreamIcon = channel.StreamIcon
+		dbChannel.EpgChannelID = channel.EpgChannelID
+		dbChannel.HDHRChannelNum = hdhrChannelNum
+		dbChannel.StreamIcon = channel.StreamIcon
+		if !exists {
 			dbChannel.Active = true
 			channelsToCreate = append(channelsToCreate, dbChannel)
-			if len(channelsToCreate) == batchSize {
-				DB.CreateInBatches(channelsToCreate, batchSize)
-				channelsToCreate = channelsToCreate[:0]
-			}
-			hdhrChannelNum++
+			createdChannels++
 		} else {
-			dbChannel.Num = channel.Num
-			dbChannel.Name = channel.Name
-			dbChannel.CategoryID = category.ID
-			dbChannel.ExternalCategoryID = channel.ExternalCategoryID
-			dbChannel.StreamID = channel.StreamID
-			if playlist.Type == "m3u" {
-				dbChannel.StreamURL = channel.StreamURL
-			} else {
-				dbChannel.StreamURL = fmt.Sprintf("%s/live/%s/%s/%d.%s", baseURL, username, password, channel.StreamID, streamFormat)
-			}
-			dbChannel.EpgChannelID = channel.EpgChannelID
-			dbChannel.HDHRChannelNum = hdhrChannelNum
-			dbChannel.StreamIcon = channel.StreamIcon
 			channelsToUpdate = append(channelsToUpdate, dbChannel)
-			if len(channelsToUpdate) == batchSize {
-				for _, channel := range channelsToUpdate {
-					DB.Save(&channel)
-				}
-				channelsToUpdate = channelsToUpdate[:0]
-			}
-			hdhrChannelNum++
+			updatedChannels++
 		}
+		hdhrChannelNum++
 
+		if err := reportChannelBatch(); err != nil {
+			markImportFailed(playlist, err)
+			return
+		}
 	}
 
-	// Handle remaining channels
-	DB.CreateInBatches(channelsToCreate, len(channelsToCreate))
-	for _, channel := range channelsToUpdate {
-		DB.Save(&channel)
+	if err := flushChannelImportBatches(&channelsToCreate, &channelsToUpdate, batchSize); err != nil {
+		markImportFailed(playlist, err)
+		return
 	}
 
-	DB.Delete(&Category{}, "playlist_id = ? and updated_at < ?", ID, startTime)
-	DB.Where("category_id IN (SELECT id FROM categories WHERE playlist_id = ?) AND updated_at < ?", ID, startTime).Delete(&Channel{})
+	if err := reportImportProgress(playlist, len(channelsResponse), len(channelsResponse), "Removing categories no longer in the playlist"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	if err := DB.Delete(&Category{}, "playlist_id = ? and updated_at < ?", ID, startTime).Error; err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	if err := reportImportProgress(playlist, len(channelsResponse), len(channelsResponse), "Removing channels no longer in the playlist"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	if err := DB.Where("category_id IN (SELECT id FROM categories WHERE playlist_id = ?) AND updated_at < ?", ID, startTime).Delete(&Channel{}).Error; err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
 
-	UpdateHDHRChannelNumForAllChannels()
+	if err := reportImportProgress(playlist, len(channelsResponse), len(channelsResponse), "Recalculating channel numbers"); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
+	if err := UpdateHDHRChannelNumForAllChannels(); err != nil {
+		markImportFailed(playlist, err)
+		return
+	}
 	playlist.ImportStatus = 2
-	err = playlist.Update()
-	if err != nil {
-		log.Print(err)
+	if err := reportImportProgress(playlist, len(channelsResponse), len(channelsResponse),
+		fmt.Sprintf("Import complete: %d channels created, %d updated, %d skipped in %s",
+			createdChannels, updatedChannels, skippedChannels, time.Since(startTime))); err != nil {
+		markImportFailed(playlist, err)
 		return
 	}
 
-	err = UpdatePlaylistEPG(*playlist)
-	if err != nil {
-		log.Print(err)
-		return
-	}
+	log.Printf("[playlist %d] Imported in %s", playlist.ID, time.Since(startTime))
+}
 
-	log.Printf("Imported playlist %d in %s", playlist.ID, time.Since(startTime))
+type channelImportKey struct {
+	categoryID uint
+	streamID   int
+}
+
+func flushChannelImportBatches(toCreate, toUpdate *[]Channel, batchSize int) error {
+	if len(*toCreate) > 0 {
+		if err := DB.CreateInBatches(toCreate, batchSize).Error; err != nil {
+			return fmt.Errorf("create channel batch: %w", err)
+		}
+		*toCreate = (*toCreate)[:0]
+	}
+	if err := saveChannelsInBatches(*toUpdate, batchSize); err != nil {
+		return fmt.Errorf("update channel batch: %w", err)
+	}
+	*toUpdate = (*toUpdate)[:0]
+	return nil
+}
+
+func saveCategoriesInBatches(categories []Category, batchSize int) error {
+	for start := 0; start < len(categories); start += batchSize {
+		end := start + batchSize
+		if end > len(categories) {
+			end = len(categories)
+		}
+		batch := categories[start:end]
+		if err := DB.Omit(clause.Associations).Save(&batch).Error; err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func saveChannelsInBatches(channels []Channel, batchSize int) error {
+	for start := 0; start < len(channels); start += batchSize {
+		end := start + batchSize
+		if end > len(channels) {
+			end = len(channels)
+		}
+		batch := channels[start:end]
+		if err := DB.Omit(clause.Associations).Save(&batch).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func GetXtreamServerInfo(playlist *Playlist) (XtreamInfo, error) {
@@ -285,7 +459,7 @@ func GetXtreamServerInfo(playlist *Playlist) (XtreamInfo, error) {
 		return XtreamInfo{}, nil
 	}
 	infoURL := fmt.Sprintf("%s/player_api.php?username=%s&password=%s&action=get_simple_date_table", playlist.Server, playlist.Username, playlist.Password)
-	response, err := http.Get(infoURL);
+	response, err := http.Get(infoURL)
 	if err != nil {
 		return XtreamInfo{}, err
 	}

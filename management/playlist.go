@@ -13,17 +13,20 @@ func (p *Playlist) Save() error {
 
 func (p *Playlist) Update() error {
 	result := DB.Model(&Playlist{}).Where("id = ?", p.ID).UpdateColumns(map[string]interface{}{
-		"Description":  p.Description,
-		"Server":       p.Server,
-		"Username":     p.Username,
-		"Password":     p.Password,
-		"Type":         p.Type,
-		"XmltvURL":     p.XmltvURL,
-		"M3uURL":       p.M3uURL,
-		"ImportStatus": p.ImportStatus,
-		"Restream":     p.Restream,
-		"ExpiresAt":    p.ExpiresAt,
-		"Expired":      p.Expired,
+		"Description":    p.Description,
+		"Server":         p.Server,
+		"Username":       p.Username,
+		"Password":       p.Password,
+		"Type":           p.Type,
+		"XmltvURL":       p.XmltvURL,
+		"M3uURL":         p.M3uURL,
+		"ImportStatus":   p.ImportStatus,
+		"ImportProgress": p.ImportProgress,
+		"ImportTotal":    p.ImportTotal,
+		"ImportMessage":  p.ImportMessage,
+		"Restream":       p.Restream,
+		"ExpiresAt":      p.ExpiresAt,
+		"Expired":        p.Expired,
 	})
 	if result.Error != nil {
 		return result.Error

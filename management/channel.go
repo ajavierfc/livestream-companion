@@ -1,6 +1,10 @@
 package management
 
-import "sync"
+import (
+	"log"
+	"sync"
+	"time"
+)
 
 func (c *Channel) Save() error {
 	result := DB.Create(&c)
@@ -155,43 +159,26 @@ func UpdateHDHRChannelNumForAllChannels() error {
 	mutexChannelNum.Lock() // Lock the mutex.
 	defer mutexChannelNum.Unlock()
 
-	// Get all playlists sorted by ID.
-	playlists := []Playlist{}
-	if err := DB.Order("id asc").Find(&playlists).Error; err != nil {
-		return err
+	startedAt := time.Now()
+	log.Printf("Recalculating HDHR channel numbers")
+	result := DB.Exec(`
+		WITH numbered_channels AS MATERIALIZED (
+			SELECT channels.id, 999 + ROW_NUMBER() OVER (
+				ORDER BY playlists.id, categories.id, channels.hdhr_channel_num, channels.id
+			) AS new_channel_num
+			FROM channels
+			JOIN categories ON categories.id = channels.category_id
+			JOIN playlists ON playlists.id = categories.playlist_id
+		)
+		UPDATE channels
+		SET hdhr_channel_num = numbered_channels.new_channel_num
+		FROM numbered_channels
+		WHERE channels.id = numbered_channels.id
+	`)
+	if result.Error != nil {
+		return result.Error
 	}
-
-	// The starting HDHRChannelNum.
-	HDHRChannelNum := 1000
-
-	// Iterate over each playlist.
-	for _, playlist := range playlists {
-		// Get all categories for the current playlist.
-		categories := []Category{}
-		if err := DB.Where("playlist_id = ?", playlist.ID).Find(&categories).Error; err != nil {
-			return err
-		}
-
-		// Iterate over each category of the playlist.
-		for _, category := range categories {
-			// Get all channels for the current category sorted by ID.
-			channels := []Channel{}
-			if err := DB.Where("category_id = ?", category.ID).Order("hdhr_channel_num asc").Find(&channels).Error; err != nil {
-				return err
-			}
-
-			// Iterate over each channel of the category.
-			for _, channel := range channels {
-				// Update the HDHRChannelNum for the channel.
-				if err := DB.Model(&channel).Update("HDHRChannelNum", HDHRChannelNum).Error; err != nil {
-					return err
-				}
-				// Increment the HDHRChannelNum.
-				HDHRChannelNum++
-			}
-		}
-	}
-
+	log.Printf("Recalculated HDHR numbers for %d channels in %s", result.RowsAffected, time.Since(startedAt))
 	return nil
 }
 

@@ -27,6 +27,9 @@ type Playlist struct {
 	XmltvURL           string
 	M3uURL             string
 	ImportStatus       int `gorm:"default:0"`
+	ImportProgress     int
+	ImportTotal        int
+	ImportMessage      string
 	EpgStatus          int `gorm:"default:0"`
 	Restream           bool
 	Expired            bool
@@ -47,7 +50,7 @@ type Category struct {
 }
 
 type Channel struct {
-    ID                 int `gorm:"uniqueIndex"`
+	ID                 int `gorm:"uniqueIndex"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
 	Num                int    `json:"num"`

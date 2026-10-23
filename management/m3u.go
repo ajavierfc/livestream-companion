@@ -2,8 +2,11 @@ package management
 
 import (
 	"bufio"
+	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -35,14 +38,24 @@ type M3uChannel struct {
 	StreamURL         string   `json:"stream_url"`
 }
 
-func getM3uData(url string) (*bufio.Scanner, error) {
+func getM3uData(url string, playlistID uint) (*bufio.Scanner, io.Closer, error) {
 	resp, err := http.Get(url)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
+	defer resp.Body.Close()
 
-	scanner := bufio.NewScanner(resp.Body)
-	return scanner, nil
+	path, size, err := saveImportSnapshot(playlistID, "source.m3u", resp.Body)
+	if err != nil {
+		return nil, nil, err
+	}
+	log.Printf("[playlist %d] Saved M3U source (%d bytes) to %s", playlistID, size, path)
+
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open saved M3U source: %w", err)
+	}
+	return bufio.NewScanner(file), file, nil
 }
 
 func M3uCategoryHandler(c *gin.Context) {
@@ -64,11 +77,13 @@ func M3uCategoryHandler(c *gin.Context) {
 	}
 
 	categories := make(map[string]string)
-	scanner, err := getM3uData(playlist.M3uURL)
+	scanner, sourceFile, err := getM3uData(playlist.M3uURL, playlist.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get data from M3U URL"})
+		log.Print(err)
 		return
 	}
+	defer sourceFile.Close()
 
 	categoryRegexp := regexp.MustCompile(`group-title="(.*?)"`)
 
@@ -83,6 +98,11 @@ func M3uCategoryHandler(c *gin.Context) {
 				categories[category] = id
 			}
 		}
+	}
+	if err := scanner.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read M3U data"})
+		log.Print(err)
+		return
 	}
 
 	result := []M3UCategory{}
@@ -112,11 +132,13 @@ func M3uChannelHandler(c *gin.Context) {
 	}
 
 	channels := make([]M3uChannel, 0)
-	scanner, err := getM3uData(playlist.M3uURL)
+	scanner, sourceFile, err := getM3uData(playlist.M3uURL, playlist.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get data from M3U URL"})
+		log.Print(err)
 		return
 	}
+	defer sourceFile.Close()
 
 	channelRegexp := regexp.MustCompile(`#EXTINF:-1 tvg-name="(.*?)" tvg-logo="(.*?)" group-title="(.*?)"`)
 
@@ -142,8 +164,17 @@ func M3uChannelHandler(c *gin.Context) {
 				},
 				StreamURL: streamURL,
 			})
+			if len(channels)%500 == 0 {
+				log.Printf("[playlist %d] Parsed %d channels from M3U source", playlist.ID, len(channels))
+			}
 		}
 	}
+	if err := scanner.Err(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to read M3U data"})
+		log.Print(err)
+		return
+	}
+	log.Printf("[playlist %d] Parsed %d channels from M3U source", playlist.ID, len(channels))
 
 	c.JSON(http.StatusOK, channels)
 }

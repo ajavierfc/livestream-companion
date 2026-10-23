@@ -1,6 +1,6 @@
 import React, { useEffect, useContext,useState,  useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Grid, Container, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, Box, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tooltip, Typography } from '@mui/material';
+import { Grid, Container, Dialog, DialogActions, DialogContent, DialogContentText, DialogTitle, IconButton, Box, Button, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Tooltip, Typography, LinearProgress } from '@mui/material';
 import { SnackbarContext } from './SnackbarContext';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -114,6 +114,28 @@ const EPGStatusButton = ({ epgStatus, handlePress }) => {
   );
 };
 
+const PlaylistImportProgress = ({ playlist }) => {
+  const total = playlist.ImportTotal || 0;
+  const progress = playlist.ImportProgress || 0;
+  const percent = total > 0 ? Math.min((progress / total) * 100, 100) : 0;
+
+  if (!playlist.ImportMessage) {
+    return null;
+  }
+
+  return (
+    <Box sx={{ minWidth: 180 }}>
+      <Typography variant="caption">{playlist.ImportMessage}</Typography>
+      {total > 0 && (
+        <>
+          <LinearProgress variant="determinate" value={percent} />
+          <Typography variant="caption">{progress.toLocaleString()} / {total.toLocaleString()} channels</Typography>
+        </>
+      )}
+    </Box>
+  );
+};
+
 const PlaylistTable = () => {
   const [rows, setRows] = useState([]);
   const navigate = useNavigate();
@@ -126,14 +148,7 @@ const PlaylistTable = () => {
       let playlists = response.data;
       setRows(response.data);
 
-      let isImporting = playlists.some(playlist => {
-        if ([0, 1].includes(playlist.ImportStatus)) {
-          return true; // Continue checking if ImportStatus is 0 or 1
-        } else if (playlist.ImportStatus === 2) {
-          return [0, 1].includes(playlist.EpgStatus); // Continue checking if ImportStatus is 2 and EpgStatus is 0 or 1
-        }
-        return false; 
-      });    
+      const isImporting = playlists.some(playlist => [0, 1].includes(playlist.ImportStatus));
       
       if (isImporting) {
         setTimeout(refreshPlaylists, 2000);
@@ -189,6 +204,7 @@ const PlaylistTable = () => {
                   <Grid item xs={12}>{row.ID}: {row.Description}{row.Expired ? " (Expired)" : ""}</Grid>
                   <Grid item xs={6}>Type: {row.Type}</Grid>
                   <Grid item xs={12}>Import Status: <ImportStatusButton importStatus={row.ImportStatus} /></Grid>
+                  <Grid item xs={12}><PlaylistImportProgress playlist={row} /></Grid>
                   <Grid item xs={12}>EPG Status: <EPGStatusButton epgStatus={row.EpgStatus} /></Grid>
                   <Grid item xs={12} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
                     <IconButton color="primary" onClick={() => handleEdit(row.ID)}>
@@ -212,6 +228,7 @@ const PlaylistTable = () => {
               <TableCell>Expiration</TableCell>
               <TableCell>Actions</TableCell>
               <TableCell>Import Status</TableCell>
+              <TableCell>Import Progress</TableCell>
               <TableCell>EPG Status</TableCell>
             </TableRow>
           </TableHead>
@@ -231,6 +248,7 @@ const PlaylistTable = () => {
                 <TableCell>
                   <ImportStatusButton playlist={row} importStatus={row.importStatus} />
                 </TableCell>
+                <TableCell><PlaylistImportProgress playlist={row} /></TableCell>
                 <TableCell>
                   <EPGStatusButton epgStatus={row.EpgStatus} />
                 </TableCell>

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -78,6 +77,13 @@ func UpdateDBEPG(checkLastProcessed bool) {
 
 var mutexEPG = &sync.Mutex{}
 
+func markEPGFailed(playlist *Playlist) {
+	playlist.EpgStatus = -1
+	if err := DB.Save(playlist).Error; err != nil {
+		log.Printf("Failed to update playlist %d EPG status: %v", playlist.ID, err)
+	}
+}
+
 func UpdatePlaylistEPG(playlist Playlist) error {
 	mutexEPG.Lock()
 	defer mutexEPG.Unlock()
@@ -99,7 +105,7 @@ func UpdatePlaylistEPG(playlist Playlist) error {
 	}
 
 	if playlist.XmltvURL == "" {
-		return nil;
+		return nil
 	}
 
 	playlist.EpgStatus = 1
@@ -151,74 +157,9 @@ func UpdatePlaylistEPG(playlist Playlist) error {
 		return fmt.Errorf("failed to delete programmes from DB: %w", err)
 	}
 
-	// Loop through each channel in XML EPG
-	for _, epgChannel := range tv.Channels {
-		// Find corresponding channels in the database
-		dbChannels, err := GetChannelsByEpgIdAndPlaylistId(epgChannel.ID, playlist.ID)
-		if err != nil {
-			log.Println("Could not find database channel for EPG ID", epgChannel.ID)
-			continue
-		}
-
-		newProgrammes := []Programme{} // Slice to hold new programmes
-
-		// For each database channel
-		for _, dbChannel := range dbChannels {
-			// Loop through each EPG programme
-			for _, epgProgramme := range tv.Programmes {
-				// If the Channel ID of the programme matches the ID of the epgChannel, create a new Programme
-				if epgProgramme.Channel == epgChannel.ID {
-					newProgramme := Programme{
-						Start:          epgProgramme.Start,
-						Stop:           epgProgramme.Stop,
-						StartTimestamp: epgProgramme.StartTimestamp,
-						StopTimestamp:  epgProgramme.StopTimestamp,
-						Channel:        epgProgramme.Channel,
-						ChannelID:      dbChannel.ID, // Reference the Channel ID.
-						Title:          epgProgramme.Title,
-						Desc:           epgProgramme.Desc,
-					}
-
-					// Add to the slice of newProgrammes
-					newProgrammes = append(newProgrammes, newProgramme)
-				}
-			}
-		}
-
-		chunkSize := 500 // Adjust this number based on your data
-		for i := 0; i < len(newProgrammes); i += chunkSize {
-			end := i + chunkSize
-
-			// Check if end is out of range
-			if end > len(newProgrammes) {
-				end = len(newProgrammes)
-			}
-
-			// Get a chunk of new programmes
-			chunk := newProgrammes[i:end]
-
-			// Prepare SQL statement and values
-			sql := "INSERT INTO `programmes` (`created_at`,`updated_at`,`deleted_at`,`start`,`stop`,`start_timestamp`,`stop_timestamp`,`channel`,`channel_id`,`title`,`desc`) VALUES "
-			values := []interface{}{}
-
-			// Loop through each programme in chunk
-			for _, programme := range chunk {
-				// Append SQL and values
-				sql += "(?,?,?,?,?,?,?,?,?,?,?),"
-				values = append(values, time.Now(), time.Now(), nil, programme.Start, programme.Stop, programme.StartTimestamp, programme.StopTimestamp, programme.Channel, programme.ChannelID, programme.Title, programme.Desc)
-			}
-
-			// Trim trailing comma
-			sql = strings.TrimSuffix(sql, ",")
-
-			// Execute SQL statement
-			err = DB.Exec(sql, values...).Error
-			if err != nil {
-				// In case of error, rollback the transaction and return from the function
-				log.Printf("Failed to save Programmes: %v", err)
-
-			}
-		}
+	if err := insertPlaylistProgrammes(playlist.ID, tv); err != nil {
+		markEPGFailed(&playlist)
+		return fmt.Errorf("failed to import EPG programmes: %w", err)
 	}
 
 	// update the EPGLastProcessedAt field and save the playlist
@@ -232,6 +173,57 @@ func UpdatePlaylistEPG(playlist Playlist) error {
 
 	log.Printf("Playlist %v processed successfully.", playlist.ID)
 
+	return nil
+}
+
+func insertPlaylistProgrammes(playlistID uint, tv *Tv) error {
+	channelsByEpgID := make(map[string][]Channel)
+	var dbChannels []Channel
+	if err := DB.Joins("JOIN categories ON categories.id = channels.category_id").
+		Where("categories.playlist_id = ?", playlistID).
+		Find(&dbChannels).Error; err != nil {
+		return fmt.Errorf("failed to load playlist channels: %w", err)
+	}
+	for _, channel := range dbChannels {
+		channelsByEpgID[channel.EpgChannelID] = append(channelsByEpgID[channel.EpgChannelID], channel)
+	}
+
+	programmeIndexesByEpgID := make(map[string][]int)
+	for i, programme := range tv.Programmes {
+		programmeIndexesByEpgID[programme.Channel] = append(programmeIndexesByEpgID[programme.Channel], i)
+	}
+
+	const programmeBatchSize = 500
+	programmesToInsert := make([]Programme, 0, programmeBatchSize)
+	for _, epgChannel := range tv.Channels {
+		indexes := programmeIndexesByEpgID[epgChannel.ID]
+		for _, dbChannel := range channelsByEpgID[epgChannel.ID] {
+			for _, index := range indexes {
+				epgProgramme := tv.Programmes[index]
+				programmesToInsert = append(programmesToInsert, Programme{
+					Start:          epgProgramme.Start,
+					Stop:           epgProgramme.Stop,
+					StartTimestamp: epgProgramme.StartTimestamp,
+					StopTimestamp:  epgProgramme.StopTimestamp,
+					Channel:        epgProgramme.Channel,
+					ChannelID:      dbChannel.ID,
+					Title:          epgProgramme.Title,
+					Desc:           epgProgramme.Desc,
+				})
+				if len(programmesToInsert) == programmeBatchSize {
+					if err := DB.CreateInBatches(&programmesToInsert, programmeBatchSize).Error; err != nil {
+						return fmt.Errorf("failed to save EPG programme batch: %w", err)
+					}
+					programmesToInsert = programmesToInsert[:0]
+				}
+			}
+		}
+	}
+	if len(programmesToInsert) > 0 {
+		if err := DB.CreateInBatches(&programmesToInsert, programmeBatchSize).Error; err != nil {
+			return fmt.Errorf("failed to save EPG programme batch: %w", err)
+		}
+	}
 	return nil
 }
 
