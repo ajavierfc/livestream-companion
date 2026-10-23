@@ -17,6 +17,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import ListIcon from '@mui/icons-material/List';
 import CategoryIcon from '@mui/icons-material/Category';
 import TvIcon from '@mui/icons-material/Tv';
+import ExploreIcon from '@mui/icons-material/Explore';
 import Typography from '@mui/material/Typography';
 import AppBar from '@mui/material/AppBar';
 import Drawer from '@mui/material/Drawer';
@@ -29,6 +30,7 @@ import Playlist from './Playlist';
 import PlaylistDetail from './PlaylistDetail';
 import Category from './Category';
 import Channel from './Channel';
+import ChannelExplorer from './ChannelExplorer';
 
 const drawerWidth = 240;
 
@@ -141,6 +143,12 @@ function AppContent() {
           </ListItemIcon>
           <ListItemText primary="Channels" />
         </ListItem>
+        <ListItem button component={SecureLink} to="/channel-explorer" onClick={handleDrawerToggle}>
+          <ListItemIcon>
+            <ExploreIcon color="primary" />
+          </ListItemIcon>
+          <ListItemText primary="Channel Explorer" />
+        </ListItem>
       </List>
     </div>
   );
@@ -250,6 +258,7 @@ function AppContent() {
             <Route path="/playlists/:id" element={<PlaylistDetail />} />
             <Route path="/categories" element={<Category />} />
             <Route path="/channels" element={<Channel />} />
+            <Route path="/channel-explorer" element={<ChannelExplorer />} />
           </Routes>
         </Box>
 

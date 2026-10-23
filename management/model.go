@@ -41,9 +41,9 @@ type Category struct {
 	CreatedAt    time.Time
 	UpdatedAt    time.Time
 	Num          int
-	ExternalID   string `gorm:"index" json:"category_id"`
-	CategoryName string `json:"category_name"`
-	PlaylistID   uint
+	ExternalID   string   `gorm:"index" json:"category_id"`
+	CategoryName string   `json:"category_name"`
+	PlaylistID   uint     `gorm:"index"`
 	Playlist     Playlist `gorm:"foreignKey:PlaylistID"`
 	Active       bool
 	Channels     []Channel `gorm:"foreignKey:CategoryID;references:ID"`
@@ -53,9 +53,9 @@ type Channel struct {
 	ID                 int `gorm:"uniqueIndex"`
 	CreatedAt          time.Time
 	UpdatedAt          time.Time
-	Num                int    `json:"num"`
-	Name               string `json:"name"`
-	CategoryID         uint
+	Num                int      `json:"num"`
+	Name               string   `json:"name"`
+	CategoryID         uint     `gorm:"index"`
 	Category           Category `gorm:"foreignKey:CategoryID"`
 	ExternalCategoryID string   `gorm:"index" json:"category_id"`
 	StreamID           int      `json:"stream_id"`

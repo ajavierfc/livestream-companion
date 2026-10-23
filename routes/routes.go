@@ -67,6 +67,7 @@ func SetupRouter() *gin.Engine {
 
 	// API endpoints for channels
 	r.GET("/api/channels", management.GetChannelsHandler)
+	r.GET("/api/channels/search", management.SearchChannelsHandler)
 	r.GET("/api/channel/:id", management.GetChannelByIDHandler)
 	r.PUT("/api/channel/:id", management.UpdateChannelByIDHandler)
 	r.GET("/api/channels/epg/:epgId", management.GetChannelsByEpgIdHandler)

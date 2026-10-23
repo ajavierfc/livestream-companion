@@ -455,6 +455,72 @@ func GetChannelsHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, channels)
 }
 
+func SearchChannelsHandler(c *gin.Context) {
+	playlistID, err := strconv.ParseUint(c.Query("playlistId"), 10, 32)
+	if err != nil || playlistID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "A valid playlistId is required"})
+		return
+	}
+
+	page := 1
+	if value := c.Query("page"); value != "" {
+		page, err = strconv.Atoi(value)
+		if err != nil || page < 1 || page > 1000000 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "page must be between 1 and 1000000"})
+			return
+		}
+	}
+
+	pageSize := 60
+	if value := c.Query("pageSize"); value != "" {
+		pageSize, err = strconv.Atoi(value)
+		if err != nil || pageSize < 1 || pageSize > 100 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "pageSize must be between 1 and 100"})
+			return
+		}
+	}
+
+	var categoryID *uint
+	if value := c.Query("categoryId"); value != "" {
+		parsedID, parseErr := strconv.ParseUint(value, 10, 32)
+		if parseErr != nil || parsedID == 0 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "categoryId must be a positive integer"})
+			return
+		}
+		id := uint(parsedID)
+		categoryID = &id
+	}
+
+	query := strings.TrimSpace(c.Query("q"))
+	prefix := strings.TrimSpace(c.Query("prefix"))
+	if len(prefix) > 32 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "prefix must be 32 characters or fewer"})
+		return
+	}
+	quality := strings.ToUpper(strings.TrimSpace(c.Query("quality")))
+	switch quality {
+	case "", "SD", "HD", "FHD", "UHD", "4K", "8K", "RAW", "HEVC":
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quality must be one of SD, HD, FHD, UHD, 4K, 8K, RAW, or HEVC"})
+		return
+	}
+	if query == "" && categoryID == nil && prefix == "" && quality == "" {
+		c.JSON(http.StatusOK, ChannelSearchResult{
+			Channels: []Channel{},
+			Page:     page,
+			PageSize: pageSize,
+		})
+		return
+	}
+
+	result, err := SearchChannels(uint(playlistID), categoryID, query, prefix, quality, page, pageSize)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
 func GetChannelByIDHandler(c *gin.Context) {
 	idStr := c.Param("id")
 	idInt, _ := strconv.Atoi(idStr)

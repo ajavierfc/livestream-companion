@@ -79,9 +79,9 @@ func TestBatchSaveAndHDHRChannelRenumbering(t *testing.T) {
 	}
 
 	categories := []Category{
-		{PlaylistID: playlists[0].ID, ExternalID: "a", CategoryName: "A"},
-		{PlaylistID: playlists[0].ID, ExternalID: "b", CategoryName: "B"},
-		{PlaylistID: playlists[1].ID, ExternalID: "c", CategoryName: "C"},
+		{PlaylistID: playlists[0].ID, ExternalID: "a", CategoryName: "A", Active: true},
+		{PlaylistID: playlists[0].ID, ExternalID: "b", CategoryName: "B", Active: true},
+		{PlaylistID: playlists[1].ID, ExternalID: "c", CategoryName: "C", Active: true},
 	}
 	if err := DB.Create(&categories).Error; err != nil {
 		t.Fatal(err)
@@ -100,10 +100,37 @@ func TestBatchSaveAndHDHRChannelRenumbering(t *testing.T) {
 	if err := DB.Create(&channels).Error; err != nil {
 		t.Fatal(err)
 	}
-
+	searchResult, err := SearchChannels(playlists[0].ID, nil, "", "", "", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchResult.Total != 3 || len(searchResult.Channels) != 1 || searchResult.Page != 1 {
+		t.Errorf("unexpected paginated channel search result: %+v", searchResult)
+	}
+	categoryID := categories[0].ID
+	searchResult, err = SearchChannels(playlists[0].ID, &categoryID, "earlier", "", "", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchResult.Total != 1 || len(searchResult.Channels) != 1 || searchResult.Channels[0].Name != "first category, earlier" {
+		t.Errorf("unexpected filtered channel search result: %+v", searchResult)
+	}
+	if err := DB.Model(&Category{}).Where("id = ?", categories[0].ID).Update("active", false).Error; err != nil {
+		t.Fatal(err)
+	}
+	searchResult, err = SearchChannels(playlists[0].ID, nil, "", "", "", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchResult.Total != 1 || searchResult.Channels[0].CategoryID != categories[1].ID {
+		t.Errorf("inactive category channels were returned: %+v", searchResult)
+	}
+	if err := DB.Model(&Category{}).Where("id = ?", categories[0].ID).Update("active", true).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := saveCategoriesInBatches([]Category{
-		{ID: categories[0].ID, PlaylistID: playlists[0].ID, ExternalID: "a", CategoryName: "Updated A"},
-		{ID: categories[1].ID, PlaylistID: playlists[0].ID, ExternalID: "b", CategoryName: "Updated B"},
+		{ID: categories[0].ID, PlaylistID: playlists[0].ID, ExternalID: "a", CategoryName: "Updated A", Active: true},
+		{ID: categories[1].ID, PlaylistID: playlists[0].ID, ExternalID: "b", CategoryName: "Updated B", Active: true},
 	}, 1); err != nil {
 		t.Fatal(err)
 	}
@@ -161,5 +188,71 @@ func TestBatchSaveAndHDHRChannelRenumbering(t *testing.T) {
 	}
 	if programmeCount != 5 {
 		t.Errorf("got %d EPG programmes, want 5", programmeCount)
+	}
+
+	sortTestChannels := []Channel{
+		{CategoryID: categories[0].ID, StreamID: 10, Name: "ES: SortTest Zulu HD"},
+		{CategoryID: categories[0].ID, StreamID: 11, Name: "M+: SortTest Beta ᴿᴬᵂ ⁶⁰ᶠᵖˢ"},
+		{CategoryID: categories[0].ID, StreamID: 12, Name: "VO: SortTest Alpha SD"},
+		{CategoryID: categories[0].ID, StreamID: 13, Name: "### SortTest Placeholder"},
+	}
+	if err := DB.Create(&sortTestChannels).Error; err != nil {
+		t.Fatal(err)
+	}
+	searchResult, err = SearchChannels(playlists[0].ID, nil, "SortTest", "", "", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantSortedNames := []string{
+		"VO: SortTest Alpha SD",
+		"M+: SortTest Beta ᴿᴬᵂ ⁶⁰ᶠᵖˢ",
+		"ES: SortTest Zulu HD",
+	}
+	if searchResult.Total != int64(len(wantSortedNames)) || len(searchResult.Channels) != len(wantSortedNames) {
+		t.Fatalf("got %d sort-test results (%d channels), want %d", searchResult.Total, len(searchResult.Channels), len(wantSortedNames))
+	}
+	for i, channel := range searchResult.Channels {
+		if channel.Name != wantSortedNames[i] {
+			t.Errorf("channel %d sorted as %q, want %q", i, channel.Name, wantSortedNames[i])
+		}
+	}
+	if len(searchResult.Prefixes) == 0 || searchResult.Prefixes[0].Value != "ES" {
+		t.Errorf("unexpected prefix facets: %+v", searchResult.Prefixes)
+	}
+	if len(searchResult.Qualities) == 0 || searchResult.Qualities[0].Value != "HD" {
+		t.Errorf("unexpected quality facets: %+v", searchResult.Qualities)
+	}
+
+	searchResult, err = SearchChannels(playlists[0].ID, nil, "SortTest", "M+", "RAW", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchResult.Total != 1 || len(searchResult.Channels) != 1 || searchResult.Channels[0].StreamID != 11 {
+		t.Errorf("prefix and quality filters returned unexpected channels: %+v", searchResult)
+	}
+
+	unicodeSuffixChannels := []Channel{
+		{CategoryID: categories[0].ID, StreamID: 14, Name: "UnicodeTag HD ᴴᴰ"},
+		{CategoryID: categories[0].ID, StreamID: 15, Name: "UnicodeTag UHD ᵁᴴᴰ"},
+		{CategoryID: categories[0].ID, StreamID: 16, Name: "UnicodeTag HEVC ʰᵉᵛᶜ"},
+	}
+	if err := DB.Create(&unicodeSuffixChannels).Error; err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		suffix  string
+		quality string
+	}{
+		{"ᴴᴰ", "HD"},
+		{"ᵁᴴᴰ", "UHD"},
+		{"ʰᵉᵛᶜ", "HEVC"},
+	} {
+		searchResult, err = SearchChannels(playlists[0].ID, nil, "UnicodeTag", "", test.quality, 1, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if searchResult.Total != 1 || len(searchResult.Channels) != 1 || !strings.HasSuffix(searchResult.Channels[0].Name, test.suffix) {
+			t.Errorf("quality %q returned unexpected channels: %+v", test.quality, searchResult.Channels)
+		}
 	}
 }

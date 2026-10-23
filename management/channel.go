@@ -2,9 +2,151 @@ package management
 
 import (
 	"log"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"gorm.io/gorm"
 )
+
+func channelNameSortExpression() string {
+	baseName := `CASE WHEN instr(channels.name, ': ') BETWEEN 2 AND 13
+		THEN substr(channels.name, instr(channels.name, ': ') + 2)
+		ELSE channels.name END`
+
+	baseName = `trim(` + baseName + `)`
+	nameWithoutFrameRate := `CASE
+		WHEN ` + baseName + ` LIKE '% ⁶⁰ᶠᵖˢ' THEN substr(` + baseName + `, 1, length(` + baseName + `) - 6)
+		ELSE ` + baseName + `
+	END`
+
+	suffixes := []string{"ʰᵉᵛᶜ", "ᵁᴴᴰ", "ᴴᴰ", "ᴿᴬᵂ", "HEVC", "RAW", "UHD", "FHD", "SD", "HD", "4K", "8K"}
+	var suffixLengthCases strings.Builder
+	for _, suffix := range suffixes {
+		length := len([]rune(" " + suffix))
+		pattern := "%" + " " + suffix
+		if suffixLengthCases.Len() > 0 {
+			suffixLengthCases.WriteString(" ")
+		}
+		suffixLengthCases.WriteString("WHEN ")
+		if strings.ContainsAny(suffix, "ᴿᴬᵂᴴᵁᵉᵛᶜ") {
+			suffixLengthCases.WriteString(nameWithoutFrameRate + " LIKE '" + pattern + "'")
+		} else {
+			suffixLengthCases.WriteString("upper(" + nameWithoutFrameRate + ") LIKE '" + pattern + "'")
+		}
+		suffixLengthCases.WriteString(" THEN ")
+		suffixLengthCases.WriteString(strconv.Itoa(length))
+	}
+
+	return `CASE
+		WHEN CASE ` + suffixLengthCases.String() + ` ELSE 0 END > 0
+		THEN substr(` + nameWithoutFrameRate + `, 1, length(` + nameWithoutFrameRate + `) - (CASE ` + suffixLengthCases.String() + ` ELSE 0 END))
+		ELSE ` + nameWithoutFrameRate + `
+	END`
+}
+
+type ChannelSearchResult struct {
+	Channels  []Channel      `json:"channels"`
+	Total     int64          `json:"total"`
+	Page      int            `json:"page"`
+	PageSize  int            `json:"pageSize"`
+	Prefixes  []ChannelFacet `json:"prefixes"`
+	Qualities []ChannelFacet `json:"qualities"`
+}
+
+type ChannelFacet struct {
+	Value string `json:"value"`
+	Count int64  `json:"count"`
+}
+
+func channelPrefixExpression() string {
+	return `CASE
+		WHEN instr(channels.name, ': ') BETWEEN 2 AND 13
+		THEN trim(substr(channels.name, 1, instr(channels.name, ': ') - 1))
+		ELSE ''
+	END`
+}
+
+func channelQualityExpression() string {
+	name := `trim(channels.name)`
+	name = `CASE
+		WHEN ` + name + ` LIKE '% ⁶⁰ᶠᵖˢ' THEN substr(` + name + `, 1, length(` + name + `) - 6)
+		ELSE ` + name + `
+	END`
+
+	return `CASE
+		WHEN ` + name + ` LIKE '% ᵁᴴᴰ' THEN 'UHD'
+		WHEN ` + name + ` LIKE '% ᴴᴰ' THEN 'HD'
+		WHEN ` + name + ` LIKE '% ʰᵉᵛᶜ' THEN 'HEVC'
+		WHEN ` + name + ` LIKE '% ᴿᴬᵂ' THEN 'RAW'
+		WHEN upper(` + name + `) LIKE '% UHD' THEN 'UHD'
+		WHEN upper(` + name + `) LIKE '% FHD' THEN 'FHD'
+		WHEN upper(` + name + `) LIKE '% 4K' THEN '4K'
+		WHEN upper(` + name + `) LIKE '% 8K' THEN '8K'
+		WHEN upper(` + name + `) LIKE '% SD' THEN 'SD'
+		WHEN upper(` + name + `) LIKE '% HD' THEN 'HD'
+		WHEN upper(` + name + `) LIKE '% RAW' THEN 'RAW'
+		WHEN upper(` + name + `) LIKE '% HEVC' THEN 'HEVC'
+		ELSE ''
+	END`
+}
+
+func SearchChannels(playlistID uint, categoryID *uint, query, prefix, quality string, page, pageSize int) (ChannelSearchResult, error) {
+	var result ChannelSearchResult
+	result.Page = page
+	result.PageSize = pageSize
+
+	baseQuery := func() *gorm.DB {
+		db := DB.Model(&Channel{}).
+			Joins("JOIN categories ON categories.id = channels.category_id").
+			Where("categories.playlist_id = ? AND categories.active = ? AND channels.name NOT LIKE ?", playlistID, true, "###%")
+		if categoryID != nil {
+			db = db.Where("channels.category_id = ?", *categoryID)
+		}
+		if query != "" {
+			escapedQuery := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+			db = db.Where(`channels.name LIKE ? ESCAPE '\'`, "%"+escapedQuery+"%")
+		}
+		return db
+	}
+
+	db := baseQuery()
+	if prefix != "" {
+		db = db.Where(channelPrefixExpression()+" = ?", prefix)
+	}
+	if quality != "" {
+		db = db.Where(channelQualityExpression()+" = ?", quality)
+	}
+
+	if err := db.Count(&result.Total).Error; err != nil {
+		return ChannelSearchResult{}, err
+	}
+	if err := baseQuery().
+		Select(channelPrefixExpression() + " AS value, COUNT(*) AS count").
+		Where(channelPrefixExpression() + " <> ''").
+		Group("value").
+		Order("count DESC, value ASC").
+		Scan(&result.Prefixes).Error; err != nil {
+		return ChannelSearchResult{}, err
+	}
+	if err := baseQuery().
+		Select(channelQualityExpression() + " AS value, COUNT(*) AS count").
+		Where(channelQualityExpression() + " <> ''").
+		Group("value").
+		Order("count DESC, value ASC").
+		Scan(&result.Qualities).Error; err != nil {
+		return ChannelSearchResult{}, err
+	}
+	if err := db.Preload("Category").
+		Order(channelNameSortExpression() + " COLLATE NOCASE ASC, channels.id ASC").
+		Limit(pageSize).
+		Offset((page - 1) * pageSize).
+		Find(&result.Channels).Error; err != nil {
+		return ChannelSearchResult{}, err
+	}
+	return result, nil
+}
 
 func (c *Channel) Save() error {
 	result := DB.Create(&c)
