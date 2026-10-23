@@ -9,3 +9,4 @@ bin/
 tmp/
 *.goE
 *.swp
+.vscode/settings.json
