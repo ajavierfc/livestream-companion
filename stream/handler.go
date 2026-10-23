@@ -319,17 +319,44 @@ func startHLSRemux(inputUrl string, id string) error {
 
 func waitForPlaylist(path string, timeout time.Duration) (string, error) {
 	deadline := time.Now().Add(timeout)
+	var previous string
 	for time.Now().Before(deadline) {
 		playlist, err := os.ReadFile(path)
-		if err == nil {
-			return string(playlist), nil
+		if err == nil && playlistReady(hlsDir, string(playlist)) {
+			// Require the playlist to look the same on two consecutive polls.
+			// While FFMPEG works through a burst, it rewrites the playlist on
+			// every segment and the segment listed first can be deleted before
+			// the client asks for it; serving only a settled playlist gives it
+			// the whole window of margin.
+			if string(playlist) == previous {
+				return string(playlist), nil
+			}
+			previous = string(playlist)
+		} else {
+			previous = ""
 		}
-		if !os.IsNotExist(err) {
+		if err != nil && !os.IsNotExist(err) {
 			log.Printf("Waiting for playlist, read error: %v", err)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
 	return "", os.ErrNotExist
+}
+
+// playlistReady reports whether the first segment listed in playlist already
+// exists in dir. FFMPEG can race ahead when the source delivers a burst at
+// connect: with delete_segments, the segment listed first may already be gone
+// by the time a client asks for it, and the player aborts with a 404.
+func playlistReady(dir, playlist string) bool {
+	for _, line := range strings.Split(playlist, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		_, err := os.Stat(filepath.Join(dir, filepath.Base(line)))
+		return err == nil
+	}
+	return false
 }
 
 func rewritePlaylistURIs(playlist string) string {
