@@ -1,0 +1,3 @@
+#!/bin/bash
+cd $(dirname $0)
+sqlite3 data/iptv.db <<< "update categories set active = 1 where category_name like 'ES%' or category_name like 'US%';"
