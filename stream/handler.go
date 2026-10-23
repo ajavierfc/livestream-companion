@@ -6,7 +6,6 @@ import (
 	"context"
 	"io"
 	"log"
-	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -38,20 +37,6 @@ type Stream struct {
 	Client   http.ResponseWriter
 }
 
-type reHijackWriter struct {
-	gin.ResponseWriter
-	conn *net.TCPConn
-}
-
-func (w *reHijackWriter) Write(b []byte) (int, error) {
-	n, err := w.conn.Write(b)
-	if err != nil {
-		// Aquí detectas la desconexión REAL
-		return n, err
-	}
-	return n, nil
-}
-
 func HandleM3U8(c *gin.Context, inputUrl string, id string) {
 	if err := startHLSRemux(inputUrl, id); err != nil {
 		log.Println("Failed to start HLS remux:", err)
@@ -78,18 +63,6 @@ func HandleM3U8(c *gin.Context, inputUrl string, id string) {
 
 func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 	ctx := c.Request.Context()
-
-	if hj, ok := c.Writer.(http.Hijacker); ok {
-		conn, _, err := hj.Hijack()
-		if err == nil {
-			tcpConn := conn.(*net.TCPConn)
-			tcpConn.SetKeepAlive(true)
-			tcpConn.SetKeepAlivePeriod(5 * time.Second)
-
-			// Volvemos a envolver el writer para seguir usando Gin
-			c.Writer = &reHijackWriter{ResponseWriter: c.Writer, conn: tcpConn}
-		}
-	}
 
 	hlsFile := filepath.Join(hlsDir, id+".m3u8")
 
@@ -200,7 +173,11 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 
 	w := c.Writer
 	w.Header().Set("Content-Type", "video/mp2t")
-	w.Header().Set("Transfer-Encoding", "chunked")
+	w.Header().Set("Cache-Control", "no-cache")
+	// Envía las cabeceras antes de que FFMPEG genere el primer segmento,
+	// para que clientes estrictos (Chromecast) reciban una respuesta HTTP válida.
+	w.WriteHeader(http.StatusOK)
+	w.Flush()
 
 	// Monitor the HLS folder for new .ts files
 	for {
@@ -243,6 +220,8 @@ func HandleTS(c *gin.Context, inputUrl string, id string, webbrowser string) {
 							log.Println("Client disconnected:", err)
 							return
 						}
+						// Vacía el buffer para que el segmento salga sin esperar al siguiente.
+						w.Flush()
 
 						// Delete the segment file
 						if err = os.Remove(filePath); err != nil {
