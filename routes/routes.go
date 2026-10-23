@@ -80,6 +80,14 @@ func SetupRouter() *gin.Engine {
 	r.GET("/api/m3u/categories/:playlistID", management.M3uCategoryHandler)
 	r.GET("/api/m3u/channels/:playlistID", management.M3uChannelHandler)
 
+	r.GET("/playlist/:playlistID", management.ExportPlaylistM3U8Handler)
+
+	r.GET("/xtream/:playlistID", management.XtreamPlayerAPIHandler)
+	r.GET("/xtream/:playlistID/", management.XtreamPlayerAPIHandler)
+	r.GET("/xtream/:playlistID/player_api.php", management.XtreamPlayerAPIHandler)
+	r.GET("/xtream/:playlistID/live/*streamPath", management.XtreamPlaylistLiveStreamHandler)
+	r.GET("/live/:username/:password/*streamPath", management.XtreamLiveStreamHandler)
+
 	r.GET("/hls/*path", management.StreamHandler)
 	r.GET("/xmltv", management.GetEPG)
 
