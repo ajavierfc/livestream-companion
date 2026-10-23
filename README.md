@@ -70,7 +70,7 @@ Once installed, using MuxPie LiveStream Companion is a breeze. Please refer to o
 Each imported playlist can be exported as an M3U8 playlist for IPTV clients:
 
 ```text
-http://<server>:5004/playlist/<playlist-id>.m3u8
+https://<server>/playlist/<playlist-id>.m3u8
 ```
 
 Add this URL as a playlist in the IPTV client. It contains channels from enabled categories only, grouped by category, with local stream URLs. No Xtream username or password is needed.
@@ -80,12 +80,14 @@ Add this URL as a playlist in the IPTV client. It contains channels from enabled
 The same playlist can also be used through an Xtream Codes-compatible API:
 
 ```text
-http://<server>:5004/xtream/<playlist-id>
+https://<server>/xtream/<playlist-id>
 ```
 
 Enter that address as the server/portal URL and provide any username and password required by the IPTV client. Credentials are accepted but not checked. Only enabled categories and their channels are returned.
 
-Both playlist formats and their streams do not require authentication. Restrict access to a trusted network or protect the service with an authenticated reverse proxy.
+Generated channel URLs follow the request protocol: local HTTP access produces HTTP URLs, while HTTPS access produces HTTPS URLs. When TLS terminates at a reverse proxy, forward the `X-Forwarded-Proto` header so exported URLs use the public protocol. Both playlist formats and their streams do not require authentication. Restrict access to a trusted network or protect the service with an authenticated reverse proxy.
+
+For direct local access, use the service's HTTP address, such as `http://<server>:5004/playlist/<playlist-id>.m3u8` or `http://<server>:5004/xtream/<playlist-id>`.
 
 ## Disclaimer
 

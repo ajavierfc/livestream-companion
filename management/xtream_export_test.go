@@ -65,6 +65,29 @@ func TestXtreamExportIncludesOnlyActivePlaylistCategories(t *testing.T) {
 	if userInfoResponse.Code != http.StatusOK {
 		t.Fatalf("user-info endpoint returned %d: %s", userInfoResponse.Code, userInfoResponse.Body.String())
 	}
+	var userInfo map[string]struct {
+		ServerProtocol string `json:"server_protocol"`
+	}
+	if err := json.Unmarshal(userInfoResponse.Body.Bytes(), &userInfo); err != nil {
+		t.Fatal(err)
+	}
+	if got := userInfo["server_info"].ServerProtocol; got != "http" {
+		t.Errorf("server protocol = %q, want http for a local HTTP request", got)
+	}
+
+	remoteRequest := httptest.NewRequest(http.MethodGet, "/xtream/1?username=any-user&******", nil)
+	remoteRequest.Header.Set("X-Forwarded-Proto", "https")
+	remoteResponse := httptest.NewRecorder()
+	router.ServeHTTP(remoteResponse, remoteRequest)
+	if remoteResponse.Code != http.StatusOK {
+		t.Fatalf("remote user-info endpoint returned %d: %s", remoteResponse.Code, remoteResponse.Body.String())
+	}
+	if err := json.Unmarshal(remoteResponse.Body.Bytes(), &userInfo); err != nil {
+		t.Fatal(err)
+	}
+	if got := userInfo["server_info"].ServerProtocol; got != "https" {
+		t.Errorf("server protocol = %q, want https for a proxied HTTPS request", got)
+	}
 
 	categoryResponse := httptest.NewRecorder()
 	router.ServeHTTP(categoryResponse, httptest.NewRequest(http.MethodGet,

@@ -11,6 +11,7 @@ import useMediaQuery from '@mui/material/useMediaQuery';
 import axios from './axiosSetup';
 import mpegts from 'mpegts.js';
 import { copyToClipboard } from './App';
+import { createVLCIntentURL } from './streamUrls';
 
 const Channels = () => {
   const [playlists, setPlaylists] = useState([]);
@@ -148,8 +149,7 @@ const Channels = () => {
 
   const playStreamInVlc = (channel) => {
     const originalUrl = getChannelUrl(channel);
-    const intentUrl = `intent://${originalUrl.replace(/^https?:\/\//, '')}#Intent;scheme=http;package=org.videolan.vlc;end`;
-    window.location.href = intentUrl;
+    window.location.href = createVLCIntentURL(originalUrl);
   }
 
   const copyStreamLink = (channel) => {

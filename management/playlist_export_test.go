@@ -84,4 +84,15 @@ func TestExportPlaylistM3U8IncludesOnlyActiveCategories(t *testing.T) {
 			t.Errorf("playlist unexpectedly contains %q:\n%s", excluded, body)
 		}
 	}
+
+	httpsRequest := httptest.NewRequest(http.MethodGet, "/playlist/1.m3u8", nil)
+	httpsRequest.Host = request.Host
+	httpsRequest.Header.Set("X-Forwarded-Proto", "https")
+	httpsResponse := httptest.NewRecorder()
+	router.ServeHTTP(httpsResponse, httpsRequest)
+	httpsURL := "https://iptv.example.test:5004/hls/" + strconv.Itoa(channels[0].ID) + ".ts"
+	if httpsResponse.Code != http.StatusOK || !strings.Contains(httpsResponse.Body.String(), httpsURL) {
+		t.Fatalf("playlist does not respect forwarded HTTPS (status %d): %s",
+			httpsResponse.Code, httpsResponse.Body.String())
+	}
 }

@@ -35,6 +35,7 @@ import mpegts from 'mpegts.js';
 import VLCIcon from './VLCIcon';
 import { SnackbarContext } from './SnackbarContext';
 import { copyToClipboard } from './App';
+import { createVLCIntentURL } from './streamUrls';
 
 const PAGE_SIZE = 60;
 const QUICK_SEARCHES_KEY = 'channel-explorer-quick-searches';
@@ -384,7 +385,7 @@ const ChannelExplorer = () => {
 
   const playInVLC = channel => {
     const url = getStreamUrl(channel);
-    window.location.href = `intent://${url.replace(/^https?:\/\//, '')}#Intent;scheme=http;package=org.videolan.vlc;end`;
+    window.location.href = createVLCIntentURL(url);
   };
 
   useEffect(() => {

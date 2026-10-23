@@ -40,14 +40,7 @@ func ExportPlaylistM3U8Handler(c *gin.Context) {
 		return
 	}
 
-	scheme := "http"
-	if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
-		scheme = "https"
-	}
-	if forwardedProto := c.GetHeader("X-Forwarded-Proto"); forwardedProto == "http" || forwardedProto == "https" {
-		scheme = forwardedProto
-	}
-	baseURL := fmt.Sprintf("%s://%s", scheme, c.Request.Host)
+	baseURL := fmt.Sprintf("%s://%s", requestScheme(c), c.Request.Host)
 
 	var playlistBody strings.Builder
 	playlistBody.WriteString("#EXTM3U\n")

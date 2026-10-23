@@ -202,7 +202,11 @@ func serveXtreamLiveStream(c *gin.Context, streamPath string, playlistID *uint) 
 }
 
 func requestScheme(c *gin.Context) string {
-	if c.Request.TLS != nil || strings.EqualFold(c.GetHeader("X-Forwarded-Proto"), "https") {
+	if forwardedProto := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")); strings.EqualFold(forwardedProto, "http") ||
+		strings.EqualFold(forwardedProto, "https") {
+		return strings.ToLower(forwardedProto)
+	}
+	if c.Request.TLS != nil {
 		return "https"
 	}
 	return "http"
