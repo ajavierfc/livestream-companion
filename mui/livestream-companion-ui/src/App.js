@@ -133,33 +133,41 @@ function AppContent() {
         </Box>
 
       </Box>
-      <List>
+      <List
+        sx={{
+          '& .MuiListItemIcon-root': {
+            minWidth: drawerContentExpanded ? 56 : 0,
+            width: drawerContentExpanded ? 'auto' : '100%',
+            justifyContent: 'center',
+          },
+        }}
+      >
         <ListItem button component={SecureLink} to="/" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Home' : undefined}>
-          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
+          <ListItemIcon>
             <HomeIcon color="primary" />
           </ListItemIcon>
           {drawerContentExpanded && <ListItemText primary="Home" />}
         </ListItem>
         <ListItem button component={SecureLink} to="/playlists" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Playlists' : undefined}>
-          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
+          <ListItemIcon>
             <ListIcon color="primary" />
           </ListItemIcon>
           {drawerContentExpanded && <ListItemText primary="Playlists" />}
         </ListItem>
         <ListItem button component={SecureLink} to="/categories" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Categories' : undefined}>
-          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
+          <ListItemIcon>
             <CategoryIcon color="primary" />
           </ListItemIcon>
           {drawerContentExpanded && <ListItemText primary="Categories" />}
         </ListItem>
         <ListItem button component={SecureLink} to="/channels" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Channels' : undefined}>
-          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
+          <ListItemIcon>
             <TvIcon color="primary" />
           </ListItemIcon>
           {drawerContentExpanded && <ListItemText primary="Channels" />}
         </ListItem>
         <ListItem button component={SecureLink} to="/channel-explorer" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Channel Explorer' : undefined}>
-          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
+          <ListItemIcon>
             <ExploreIcon color="primary" />
           </ListItemIcon>
           {drawerContentExpanded && <ListItemText primary="Channel Explorer" />}
