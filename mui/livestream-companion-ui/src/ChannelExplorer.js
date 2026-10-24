@@ -299,6 +299,20 @@ const ChannelExplorer = () => {
     }
   };
 
+  const resetSearch = () => {
+    requestIdRef.current += 1;
+    setQuery('');
+    setCategoryId('');
+    setAppliedSearch(null);
+    setChannels([]);
+    setTotal(0);
+    setPrefixes([]);
+    setQualities([]);
+    setPage(0);
+    setLoading(false);
+    setError('');
+  };
+
   const chooseCategory = (nextCategoryId) => {
     setCategoryId(nextCategoryId);
     fetchResults({ playlistId, categoryId: nextCategoryId, query, prefix: '', quality: '' }, 1);
@@ -459,39 +473,56 @@ const ChannelExplorer = () => {
             </FormControl>
           </Box>
           <Box>
-            <Box component="form" onSubmit={submitSearch}>
-              <TextField
-                fullWidth
-                label="Search channels"
-                placeholder="e.g. news, sports..."
-                value={query}
-                onChange={event => setQuery(event.target.value)}
-                disabled={!playlistId}
-                InputProps={{
-                  endAdornment: (
-                    <InputAdornment position="end">
-                      {(query || appliedSearch?.query) && (
+            <Box sx={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(0, 1fr) auto',
+              alignItems: 'center',
+              columnGap: { xs: '16px', md: '24px' },
+            }}>
+              <Box component="form" onSubmit={submitSearch} sx={{ minWidth: 0 }}>
+                <TextField
+                  fullWidth
+                  label="Search channels"
+                  placeholder="e.g. news, sports..."
+                  value={query}
+                  onChange={event => setQuery(event.target.value)}
+                  disabled={!playlistId}
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        {(query || appliedSearch?.query) && (
+                          <IconButton
+                            type="button"
+                            aria-label="Clear search"
+                            onClick={clearSearch}
+                            disabled={!playlistId || loading}
+                          >
+                            <ClearIcon />
+                          </IconButton>
+                        )}
                         <IconButton
-                          type="button"
-                          aria-label="Clear search"
-                          onClick={clearSearch}
+                          type="submit"
+                          aria-label="Search"
+                          edge="end"
                           disabled={!playlistId || loading}
                         >
-                          <ClearIcon />
+                          <SearchIcon />
                         </IconButton>
-                      )}
-                      <IconButton
-                        type="submit"
-                        aria-label="Search"
-                        edge="end"
-                        disabled={!playlistId || loading}
-                      >
-                        <SearchIcon />
-                      </IconButton>
-                    </InputAdornment>
-                  ),
-                }}
-              />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Box>
+              <Button
+                type="button"
+                onClick={resetSearch}
+                disabled={!playlistId || loading || (!query && !categoryId && !appliedSearch)}
+                variant="contained"
+                color="primary"
+                sx={{ whiteSpace: 'nowrap' }}
+              >
+                Reset
+              </Button>
             </Box>
           </Box>
         </Box>
