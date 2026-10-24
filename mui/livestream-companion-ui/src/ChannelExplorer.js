@@ -389,23 +389,32 @@ const ChannelExplorer = () => {
   };
 
   useEffect(() => {
-    if (!openPlayer || !currentChannel || !videoRef.current || !mpegts.isSupported()) return undefined;
+    if (!openPlayer || !currentChannel || !mpegts.isSupported()) return undefined;
     const token = new URLSearchParams(window.location.search).get('secure');
-    const player = mpegts.createPlayer({
-      type: 'mpegts',
-      isLive: true,
-      url: `/hls/${currentChannel.ID}.ts?webbrowser=true${token ? `&secure=${token}` : ''}`,
-    });
-    player.attachMediaElement(videoRef.current);
-    player.load();
-    player.play().catch(error => console.warn('Unable to start channel preview', error));
+    let player;
+    const timeout = setTimeout(() => {
+      if (!videoRef.current) return;
+      player = mpegts.createPlayer({
+        type: 'mpegts',
+        isLive: true,
+        url: `/hls/${currentChannel.ID}.ts?webbrowser=true${token ? `&secure=${token}` : ''}`,
+      });
+      player.attachMediaElement(videoRef.current);
+      player.load();
+      player.play().catch(error => console.warn('Unable to start channel preview', error));
+    }, 100);
 
     return () => {
-      player.destroy();
+      clearTimeout(timeout);
+      if (player) {
+        player.detachMediaElement();
+        player.destroy();
+      }
     };
   }, [openPlayer, currentChannel]);
 
   const selectedPlaylist = playlists.find(item => String(item.ID) === String(playlistId));
+  const noQualityFacet = qualities.find(facet => facet.value === 'NONE');
 
   return (
     <Container maxWidth="xl">
@@ -526,13 +535,13 @@ const ChannelExplorer = () => {
                 ))}
               </Box>
             )}
-            {prefixes.length > 0 && qualities.length > 0 && (
+            {prefixes.length > 0 && appliedSearch && (
               <Box sx={{ height: 8, flex: '0 0 8px' }} />
             )}
-            {qualities.length > 0 && (
+            {appliedSearch && (
               <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 3, rowGap: 1 }}>
                 <Typography variant="body2" color="text.secondary" sx={{ minWidth: 72 }}>Quality</Typography>
-                {qualities.map(facet => (
+                {qualities.filter(facet => facet.value !== 'NONE').map(facet => (
                   <Chip
                     key={facet.value}
                     label={`${facet.value} (${facet.count})`}
@@ -542,6 +551,13 @@ const ChannelExplorer = () => {
                     disabled={loading}
                   />
                 ))}
+                <Chip
+                  label={`No quality detected${noQualityFacet ? ` (${noQualityFacet.count})` : ''}`}
+                  onClick={() => toggleChannelFacet('quality', 'NONE')}
+                  color={appliedSearch.quality === 'NONE' ? 'primary' : 'default'}
+                  variant={appliedSearch.quality === 'NONE' ? 'filled' : 'outlined'}
+                  disabled={loading}
+                />
               </Box>
             )}
           </Box>

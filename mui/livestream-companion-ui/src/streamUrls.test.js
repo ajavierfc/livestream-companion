@@ -7,9 +7,9 @@ describe('createVLCIntentURL', () => {
     );
   });
 
-  it('preserves HTTP for VLC', () => {
+  it('uses HTTPS for HTTP stream URLs in VLC', () => {
     expect(createVLCIntentURL('http://iptv.example.test/hls/12.ts')).toBe(
-      'intent://iptv.example.test/hls/12.ts#Intent;scheme=http;package=org.videolan.vlc;end'
+      'intent://iptv.example.test/hls/12.ts#Intent;scheme=https;package=org.videolan.vlc;end'
     );
   });
 });

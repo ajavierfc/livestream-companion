@@ -499,9 +499,9 @@ func SearchChannelsHandler(c *gin.Context) {
 	}
 	quality := strings.ToUpper(strings.TrimSpace(c.Query("quality")))
 	switch quality {
-	case "", "SD", "HD", "FHD", "UHD", "4K", "8K", "RAW", "HEVC":
+	case "", "SD", "HD", "FHD", "UHD", "4K", "8K", "RAW", "HEVC", "NONE":
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "quality must be one of SD, HD, FHD, UHD, 4K, 8K, RAW, or HEVC"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "quality must be one of SD, HD, FHD, UHD, 4K, 8K, RAW, HEVC, or NONE"})
 		return
 	}
 	if query == "" && categoryID == nil && prefix == "" && quality == "" {

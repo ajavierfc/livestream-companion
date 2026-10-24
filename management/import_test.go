@@ -255,4 +255,27 @@ func TestBatchSaveAndHDHRChannelRenumbering(t *testing.T) {
 			t.Errorf("quality %q returned unexpected channels: %+v", test.quality, searchResult.Channels)
 		}
 	}
+
+	noQualityChannel := Channel{
+		CategoryID: categories[0].ID,
+		StreamID:   17,
+		Name:       "NoQualitySuffixTest",
+	}
+	if err := DB.Create(&noQualityChannel).Error; err != nil {
+		t.Fatal(err)
+	}
+	searchResult, err = SearchChannels(playlists[0].ID, nil, "NoQualitySuffixTest", "", "", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(searchResult.Qualities) != 1 || searchResult.Qualities[0].Value != "NONE" || searchResult.Qualities[0].Count != 1 {
+		t.Errorf("unexpected quality facets for channel without suffix: %+v", searchResult.Qualities)
+	}
+	searchResult, err = SearchChannels(playlists[0].ID, nil, "NoQualitySuffixTest", "", "NONE", 1, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if searchResult.Total != 1 || len(searchResult.Channels) != 1 || searchResult.Channels[0].StreamID != 17 {
+		t.Errorf("no-quality filter returned unexpected channels: %+v", searchResult.Channels)
+	}
 }

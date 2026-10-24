@@ -33,6 +33,7 @@ import Channel from './Channel';
 import ChannelExplorer from './ChannelExplorer';
 
 const drawerWidth = 240;
+const collapsedDrawerWidth = 64;
 
 export const copyToClipboard = async (text) => {
   if (navigator.clipboard) {
@@ -70,6 +71,9 @@ function AppContent() {
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up('sm'));
   const [drawerOpen, setDrawerOpen] = useState(true);
+  const [drawerPinned, setDrawerPinned] = useState(false);
+  const [drawerHovered, setDrawerHovered] = useState(false);
+  const [drawerFocused, setDrawerFocused] = useState(false);
   const { openSnackbar } = useContext(SnackbarContext);
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -87,8 +91,19 @@ function AppContent() {
   }, [openSnackbar]);
 
   const handleDrawerToggle = () => {
-    setDrawerOpen(!drawerOpen);
+    if (isDesktop) {
+      setDrawerPinned(open => !open);
+      return;
+    }
+    setDrawerOpen(open => !open);
   };
+
+  const closeDrawerOnNavigation = () => {
+    if (!isDesktop) setDrawerOpen(false);
+  };
+
+  const drawerExpanded = isDesktop && (drawerPinned || drawerHovered || drawerFocused);
+  const drawerContentExpanded = !isDesktop || drawerExpanded;
 
   const drawer = (
     <div>
@@ -98,15 +113,15 @@ function AppContent() {
         padding: '0 15px', 
         px: 1, 
         ...theme.mixins.toolbar,
-        justifyContent: 'space-between',
+        justifyContent: drawerContentExpanded ? 'space-between' : 'center',
       }}>
         <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Typography variant="h6" noWrap component="div" sx={{ color: '#fff', fontSize: '1.6rem', marginRight: 10 }}>
+          <Typography variant="h6" noWrap component="div" sx={{ color: '#fff', fontSize: '1.6rem', marginRight: 1, display: drawerContentExpanded ? 'block' : 'none' }}>
             MuxPie
           </Typography>
           <Box sx={{ 
-              display: 'flex', 
               flexDirection: 'column', 
+              display: drawerContentExpanded ? 'flex' : 'none',
           }}>
             <Typography variant="body2" noWrap component="div" sx={{ color: '#fff', fontSize: '0.7rem' }}>
               Livestream
@@ -119,35 +134,35 @@ function AppContent() {
 
       </Box>
       <List>
-        <ListItem button component={SecureLink} to="/" onClick={handleDrawerToggle}>
-          <ListItemIcon>
+        <ListItem button component={SecureLink} to="/" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Home' : undefined}>
+          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
             <HomeIcon color="primary" />
           </ListItemIcon>
-          <ListItemText primary="Home" />
+          {drawerContentExpanded && <ListItemText primary="Home" />}
         </ListItem>
-        <ListItem button component={SecureLink} to="/playlists" onClick={handleDrawerToggle}>
-          <ListItemIcon>
+        <ListItem button component={SecureLink} to="/playlists" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Playlists' : undefined}>
+          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
             <ListIcon color="primary" />
           </ListItemIcon>
-          <ListItemText primary="Playlists" />
+          {drawerContentExpanded && <ListItemText primary="Playlists" />}
         </ListItem>
-        <ListItem button component={SecureLink} to="/categories" onClick={handleDrawerToggle}>
-          <ListItemIcon>
+        <ListItem button component={SecureLink} to="/categories" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Categories' : undefined}>
+          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
             <CategoryIcon color="primary" />
           </ListItemIcon>
-          <ListItemText primary="Categories" />
+          {drawerContentExpanded && <ListItemText primary="Categories" />}
         </ListItem>
-        <ListItem button component={SecureLink} to="/channels" onClick={handleDrawerToggle}>
-          <ListItemIcon>
+        <ListItem button component={SecureLink} to="/channels" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Channels' : undefined}>
+          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
             <TvIcon color="primary" />
           </ListItemIcon>
-          <ListItemText primary="Channels" />
+          {drawerContentExpanded && <ListItemText primary="Channels" />}
         </ListItem>
-        <ListItem button component={SecureLink} to="/channel-explorer" onClick={handleDrawerToggle}>
-          <ListItemIcon>
+        <ListItem button component={SecureLink} to="/channel-explorer" onClick={closeDrawerOnNavigation} title={!drawerContentExpanded ? 'Channel Explorer' : undefined}>
+          <ListItemIcon sx={{ minWidth: drawerContentExpanded ? 56 : 0, justifyContent: 'center' }}>
             <ExploreIcon color="primary" />
           </ListItemIcon>
-          <ListItemText primary="Channel Explorer" />
+          {drawerContentExpanded && <ListItemText primary="Channel Explorer" />}
         </ListItem>
       </List>
     </div>
@@ -228,15 +243,26 @@ function AppContent() {
 
         <Drawer
           variant={isDesktop ? 'permanent' : 'temporary'}
-          open={drawerOpen}
+          open={isDesktop || drawerOpen}
           onClose={handleDrawerToggle}
+          onMouseEnter={() => setDrawerHovered(true)}
+          onMouseLeave={() => setDrawerHovered(false)}
+          onFocus={() => setDrawerFocused(true)}
+          onBlur={event => {
+            if (!event.currentTarget.contains(event.relatedTarget)) setDrawerFocused(false);
+          }}
           sx={{
             '& .MuiDrawer-paper': { 
-              width: drawerWidth, 
+              width: isDesktop ? (drawerExpanded ? drawerWidth : collapsedDrawerWidth) : drawerWidth,
               boxSizing: 'border-box',
               backgroundImage: 'none !important',
+              overflowX: 'hidden',
+              transition: theme.transitions.create('width', {
+                easing: theme.transitions.easing.sharp,
+                duration: theme.transitions.duration.short,
+              }),
             },
-            width: drawerWidth,
+            width: isDesktop ? collapsedDrawerWidth : drawerWidth,
             flexShrink: 0,
             [`& .MuiDrawer-paperAnchorDockedLeft`]: {
               borderRight: 0,
@@ -248,7 +274,7 @@ function AppContent() {
         <Box
           margin={"20px"}
           component="main"
-          sx={{ flexGrow: 1, ml: drawerOpen ? drawerWidth : 0 }}
+          sx={{ flexGrow: 1, ml: isDesktop ? collapsedDrawerWidth : drawerOpen ? drawerWidth : 0 }}
         >
           <Toolbar /> {/* This is necessary to offset content below AppBar */}
           <Routes>

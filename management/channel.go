@@ -116,7 +116,11 @@ func SearchChannels(playlistID uint, categoryID *uint, query, prefix, quality st
 		db = db.Where(channelPrefixExpression()+" = ?", prefix)
 	}
 	if quality != "" {
-		db = db.Where(channelQualityExpression()+" = ?", quality)
+		if quality == "NONE" {
+			db = db.Where(channelQualityExpression() + " = ''")
+		} else {
+			db = db.Where(channelQualityExpression()+" = ?", quality)
+		}
 	}
 
 	if err := db.Count(&result.Total).Error; err != nil {
@@ -130,9 +134,9 @@ func SearchChannels(playlistID uint, categoryID *uint, query, prefix, quality st
 		Scan(&result.Prefixes).Error; err != nil {
 		return ChannelSearchResult{}, err
 	}
+	qualityExpression := channelQualityExpression()
 	if err := baseQuery().
-		Select(channelQualityExpression() + " AS value, COUNT(*) AS count").
-		Where(channelQualityExpression() + " <> ''").
+		Select("CASE WHEN " + qualityExpression + " = '' THEN 'NONE' ELSE " + qualityExpression + " END AS value, COUNT(*) AS count").
 		Group("value").
 		Order("count DESC, value ASC").
 		Scan(&result.Qualities).Error; err != nil {
